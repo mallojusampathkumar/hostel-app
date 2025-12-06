@@ -74,8 +74,11 @@ function LoginPage({ onLogin }) {
 }
 
 // --- 2. SUPER ADMIN PANEL ---
+
+// --- 2. SUPER ADMIN PANEL (Updated with Password Change) ---
 function AdminPanel({ user, onLogout }) {
     const [owners, setOwners] = useState([]);
+    const [newPass, setNewPass] = useState("");
 
     useEffect(() => {
         axios.get(`${API}/admin/users`).then(res => setOwners(res.data));
@@ -88,6 +91,17 @@ function AdminPanel({ user, onLogout }) {
         setOwners(res.data);
     };
 
+    const handleChangePassword = async () => {
+        if (!newPass) return alert("Please enter a new password");
+        if (confirm("Are you sure you want to change the Admin password?")) {
+            try {
+                await axios.post(`${API}/admin/change-password`, { newPassword: newPass });
+                alert("Password Updated! Please log in again.");
+                onLogout();
+            } catch (e) { alert("Error updating password"); }
+        }
+    };
+
     return (
         <div className="min-h-screen bg-gray-100">
             <div className="bg-gray-800 text-white p-4 flex justify-between items-center shadow-md">
@@ -98,6 +112,27 @@ function AdminPanel({ user, onLogout }) {
             </div>
 
             <div className="p-8 max-w-4xl mx-auto">
+                
+                {/* Security Section */}
+                <div className="bg-white p-6 rounded shadow mb-8 border-l-4 border-red-500">
+                    <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><Lock size={18}/> Security Settings</h3>
+                    <div className="flex gap-4 items-end">
+                        <div className="flex-1">
+                            <label className="text-xs font-bold text-gray-500 uppercase">New Admin Password</label>
+                            <input 
+                                type="text" 
+                                className="w-full border p-2 rounded" 
+                                placeholder="Enter new strong password"
+                                value={newPass}
+                                onChange={(e) => setNewPass(e.target.value)}
+                            />
+                        </div>
+                        <button onClick={handleChangePassword} className="bg-red-600 text-white px-6 py-2 rounded font-bold hover:bg-red-700 h-10">
+                            Update Password
+                        </button>
+                    </div>
+                </div>
+
                 <h2 className="text-2xl font-bold mb-6">Manage Hostel Owners</h2>
                 <div className="bg-white rounded shadow overflow-hidden">
                     <table className="w-full">
