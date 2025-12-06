@@ -9,11 +9,15 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
+// Cloud Database Connection
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
 
+console.log("Connecting to Cloud Database...");
+
+// Initialize Tables
 const initDB = async () => {
     try {
         await pool.query(`CREATE TABLE IF NOT EXISTS users (
@@ -21,13 +25,16 @@ const initDB = async () => {
             is_approved INTEGER DEFAULT 0, setup_complete INTEGER DEFAULT 0, 
             hostel_name TEXT, total_floors INTEGER
         );`);
+
         const adminPass = bcrypt.hashSync("admin123", 10);
         await pool.query(`INSERT INTO users (username, password, is_approved, setup_complete) 
             VALUES ('admin', $1, 1, 1) ON CONFLICT (username) DO NOTHING;`, [adminPass]);
+
         await pool.query(`CREATE TABLE IF NOT EXISTS rooms (
             id SERIAL PRIMARY KEY, user_id INTEGER, floor_number INTEGER, 
             room_number TEXT, capacity INTEGER
         );`);
+
         await pool.query(`CREATE TABLE IF NOT EXISTS beds (
             id SERIAL PRIMARY KEY, room_id INTEGER REFERENCES rooms(id), 
             bed_index INTEGER, is_occupied INTEGER DEFAULT 0, 
@@ -35,14 +42,15 @@ const initDB = async () => {
             leave_date TEXT, advance_amount REAL, maintenance_charges REAL, 
             last_rent_paid TEXT
         );`);
-        console.log("Database Ready.");
-    } catch (err) { console.error(err); }
+        console.log("Database Tables Ready.");
+    } catch (err) { console.error("DB Init Error:", err); }
 };
 initDB();
 
 const query = (text, params) => pool.query(text, params);
 
-// ROUTES
+// --- ROUTES ---
+
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
     try {
@@ -56,12 +64,14 @@ app.post('/api/login', async (req, res) => {
             if (bcrypt.compareSync(password, user.password)) {
                 if (user.is_approved === 1) res.json(user);
                 else res.status(403).json({ error: "NOT_APPROVED" });
-            } else res.status(401).json({ error: "Invalid password" });
+            } else {
+                res.status(401).json({ error: "Invalid password" });
+            }
         }
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ADMIN ROUTES
+// --- ADMIN ROUTES ---
 app.get('/api/admin/users', async (req, res) => {
     try {
         const result = await query("SELECT id, username, hostel_name, is_approved FROM users WHERE username != 'admin'");
@@ -84,21 +94,21 @@ app.post('/api/admin/change-password', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- NEW: DELETE USER (Wipes everything for that owner) ---
-app.post('/api/admin/delete-user', async (req, res) => {
+// NEW: DELETE OWNER (Cascading Delete)
+app.post('/api/admin/delete-owner', async (req, res) => {
     const { userId } = req.body;
     try {
         // 1. Delete Beds
-        await query(`DELETE FROM beds WHERE room_id IN (SELECT id FROM rooms WHERE user_id = $1)`, [userId]);
+        await query('DELETE FROM beds WHERE room_id IN (SELECT id FROM rooms WHERE user_id = $1)', [userId]);
         // 2. Delete Rooms
-        await query(`DELETE FROM rooms WHERE user_id = $1`, [userId]);
+        await query('DELETE FROM rooms WHERE user_id = $1', [userId]);
         // 3. Delete User
-        await query(`DELETE FROM users WHERE id = $1`, [userId]);
+        await query('DELETE FROM users WHERE id = $1', [userId]);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// APP ROUTES
+// --- HOSTEL ROUTES ---
 app.post('/api/setup', async (req, res) => {
     const { userId, hostelName, totalFloors, rooms } = req.body;
     try {
@@ -113,17 +123,22 @@ app.post('/api/setup', async (req, res) => {
 });
 
 app.post('/api/reset-hostel', async (req, res) => {
+    const { userId } = req.body;
     try {
-        await query(`DELETE FROM beds WHERE room_id IN (SELECT id FROM rooms WHERE user_id = $1)`, [req.body.userId]);
-        await query(`DELETE FROM rooms WHERE user_id = $1`, [req.body.userId]);
-        await query(`UPDATE users SET setup_complete = 0 WHERE id = $1`, [req.body.userId]);
+        await query(`DELETE FROM beds WHERE room_id IN (SELECT id FROM rooms WHERE user_id = $1)`, [userId]);
+        await query(`DELETE FROM rooms WHERE user_id = $1`, [userId]);
+        await query(`UPDATE users SET setup_complete = 0 WHERE id = $1`, [userId]);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/dashboard/:userId', async (req, res) => {
     try {
-        const sql = `SELECT r.id as room_id, r.floor_number, r.room_number, r.capacity, b.id as bed_id, b.bed_index, b.is_occupied, b.client_name, b.client_mobile, b.join_date, b.leave_date, b.advance_amount, b.maintenance_charges, b.last_rent_paid FROM rooms r LEFT JOIN beds b ON r.id = b.room_id WHERE r.user_id = $1 ORDER BY r.floor_number, r.room_number, b.bed_index`;
+        const sql = `
+            SELECT r.id as room_id, r.floor_number, r.room_number, r.capacity,
+            b.id as bed_id, b.bed_index, b.is_occupied, b.client_name, b.client_mobile, b.join_date, b.leave_date, b.advance_amount, b.maintenance_charges, b.last_rent_paid
+            FROM rooms r LEFT JOIN beds b ON r.id = b.room_id
+            WHERE r.user_id = $1 ORDER BY r.floor_number, r.room_number, b.bed_index`;
         const result = await query(sql, [req.params.userId]);
         const roomsMap = {};
         result.rows.forEach(row => {
@@ -134,7 +149,10 @@ app.get('/api/dashboard/:userId', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/book', async (req, res) => { try { await query(`UPDATE beds SET is_occupied = 1, client_name = $1, client_mobile = $2, join_date = $3, leave_date = $4, advance_amount = $5, maintenance_charges = $6, last_rent_paid = NULL WHERE id = $7`, [req.body.clientName, req.body.clientMobile, req.body.joinDate, req.body.leaveDate, req.body.advance, req.body.maintenance, req.body.bedId]); res.json({ success: true }); } catch (err) { res.status(500).json({ error: err.message }); } });
+app.post('/api/book', async (req, res) => {
+    const { bedId, clientName, clientMobile, joinDate, leaveDate, advance, maintenance } = req.body;
+    try { await query(`UPDATE beds SET is_occupied = 1, client_name = $1, client_mobile = $2, join_date = $3, leave_date = $4, advance_amount = $5, maintenance_charges = $6, last_rent_paid = NULL WHERE id = $7`, [clientName, clientMobile, joinDate, leaveDate, advance, maintenance, bedId]); res.json({ success: true }); } catch (err) { res.status(500).json({ error: err.message }); }
+});
 app.post('/api/update-leave', async (req, res) => { try { await query(`UPDATE beds SET leave_date = $1 WHERE id = $2`, [req.body.leaveDate, req.body.bedId]); res.json({ success: true }); } catch (err) { res.status(500).json({ error: err.message }); } });
 app.post('/api/pay-rent', async (req, res) => { try { await query(`UPDATE beds SET last_rent_paid = $1 WHERE id = $2`, [req.body.monthString, req.body.bedId]); res.json({ success: true }); } catch (err) { res.status(500).json({ error: err.message }); } });
 app.post('/api/vacate', async (req, res) => { try { await query(`UPDATE beds SET is_occupied = 0, client_name = NULL, client_mobile = NULL, join_date = NULL, leave_date = NULL, advance_amount = NULL, maintenance_charges = NULL, last_rent_paid = NULL WHERE id = $1`, [req.body.bedId]); res.json({ success: true }); } catch (err) { res.status(500).json({ error: err.message }); } });

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { BedDouble, LogOut, Search, MessageCircle, Banknote, UserMinus, MousePointer2, Users, Calendar, ShieldCheck, Lock, RefreshCw, Loader2, Send } from 'lucide-react';
+import { BedDouble, LogOut, Search, MessageCircle, Banknote, UserMinus, MousePointer2, Users, Calendar, ShieldCheck, Lock, RefreshCw, Loader2, Send, Trash2 } from 'lucide-react';
 
 // --- CONFIGURATION ---
 const API = "https://hostel-backend-0dev.onrender.com/api"; 
@@ -67,16 +67,32 @@ function LoginPage({ onLogin }) {
   );
 }
 
-// --- ADMIN ---
+// --- ADMIN (Updated with DELETE Button) ---
 function AdminPanel({ user, onLogout }) {
     const [owners, setOwners] = useState([]);
     const [newPass, setNewPass] = useState("");
-    useEffect(() => { axios.get(`${API}/admin/users`).then(res => setOwners(res.data)); }, []);
+    
+    useEffect(() => { loadOwners(); }, []);
+    
+    const loadOwners = () => { axios.get(`${API}/admin/users`).then(res => setOwners(res.data)); }
+
     const toggleStatus = async (userId, currentStatus) => {
         await axios.post(`${API}/admin/approve`, { userId, status: currentStatus === 1 ? 0 : 1 });
-        const res = await axios.get(`${API}/admin/users`);
-        setOwners(res.data);
+        loadOwners();
     };
+
+    const handleDeleteOwner = async (userId, username) => {
+        if(confirm(`🚨 DANGER: Are you sure you want to DELETE owner "${username}"?\n\nThis will permanently delete:\n- Their Account\n- All Rooms\n- All Tenants\n\nThis cannot be undone.`)) {
+            try {
+                await axios.post(`${API}/admin/delete-owner`, { userId });
+                alert("Owner Deleted Successfully.");
+                loadOwners();
+            } catch(e) {
+                alert("Error deleting owner.");
+            }
+        }
+    };
+
     const handleChangePassword = async () => {
         if (!newPass) return alert("Enter password");
         if (confirm("Change Admin password?")) {
@@ -95,14 +111,15 @@ function AdminPanel({ user, onLogout }) {
                 <h2 className="text-2xl font-bold mb-6">Hostel Owners</h2>
                 <div className="bg-white rounded shadow">
                     <table className="w-full">
-                        <thead className="bg-gray-200"><tr><th className="p-4">Username</th><th className="p-4">Hostel</th><th className="p-4">Status</th><th className="p-4">Action</th></tr></thead>
+                        <thead className="bg-gray-200"><tr><th className="p-4">Username</th><th className="p-4">Hostel</th><th className="p-4">Status</th><th className="p-4">Action</th><th className="p-4">Delete</th></tr></thead>
                         <tbody>
                             {owners.map(owner => (
                                 <tr key={owner.id} className="border-b text-center">
                                     <td className="p-4 font-bold">{owner.username}</td>
                                     <td className="p-4">{owner.hostel_name || 'Not Setup'}</td>
                                     <td className="p-4">{owner.is_approved === 1 ? 'Active' : 'Pending'}</td>
-                                    <td className="p-4"><button onClick={() => toggleStatus(owner.id, owner.is_approved)} className={`px-4 py-2 rounded text-white font-bold text-sm ${owner.is_approved === 1 ? 'bg-red-500' : 'bg-green-600'}`}>{owner.is_approved === 1 ? 'Block' : 'Approve'}</button></td>
+                                    <td className="p-4"><button onClick={() => toggleStatus(owner.id, owner.is_approved)} className={`px-4 py-2 rounded text-white font-bold text-sm ${owner.is_approved === 1 ? 'bg-orange-500' : 'bg-green-600'}`}>{owner.is_approved === 1 ? 'Block' : 'Approve'}</button></td>
+                                    <td className="p-4"><button onClick={() => handleDeleteOwner(owner.id, owner.username)} className="bg-red-600 text-white p-2 rounded hover:bg-red-800" title="Delete Owner"><Trash2 size={16}/></button></td>
                                 </tr>
                             ))}
                         </tbody>
@@ -113,7 +130,7 @@ function AdminPanel({ user, onLogout }) {
     );
 }
 
-// --- SETUP (UPDATED with Defaults & Loading) ---
+// --- SETUP ---
 function SetupPage({ user, onUpdate }) {
   const [step, setStep] = useState(1);
   const [config, setConfig] = useState({ hostelName: '', maxFloor: 3, defaultCapacity: 2 });
@@ -123,7 +140,6 @@ function SetupPage({ user, onUpdate }) {
   const [isDragging, setIsDragging] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Generate Floors
   const handleGenerate = () => {
     let rooms = [];
     const start = parseInt(range.start.slice(-2)); 
@@ -132,7 +148,6 @@ function SetupPage({ user, onUpdate }) {
       for (let r = start; r <= end; r++) {
         const roomPrefix = f === 0 ? 'G' : f;
         const roomNo = `${roomPrefix}${r.toString().padStart(2, '0')}`;
-        // USE DEFAULT CAPACITY HERE TO SAVE TIME
         rooms.push({ floor: f, roomNo: roomNo, capacity: config.defaultCapacity });
       }
     }
@@ -145,14 +160,11 @@ function SetupPage({ user, onUpdate }) {
   const applyCap = (cap) => { const u = generatedRooms.map((r, i) => selectedIndices.has(i) ? { ...r, capacity: cap } : r); setGeneratedRooms(u); setSelectedIndices(new Set()); };
   
   const submitSetup = async () => { 
-      setLoading(true); // START LOADING
+      setLoading(true);
       try {
         await axios.post(`${API}/setup`, { userId: user.id, hostelName: config.hostelName, totalFloors: config.maxFloor + 1, rooms: generatedRooms }); 
         onUpdate({ ...user, setup_complete: 1, hostel_name: config.hostelName }); 
-      } catch(e) { 
-        alert("Error saving setup"); 
-        setLoading(false);
-      }
+      } catch(e) { alert("Error saving setup"); setLoading(false); }
   };
   
   const getColor = (c) => {
@@ -182,7 +194,6 @@ function SetupPage({ user, onUpdate }) {
                 <option value={8}>Ground + 8 Floors</option>
             </select>
 
-            {/* NEW: Default Capacity */}
             <label className="block font-bold mb-2 text-blue-800">Default Sharing (Auto-fill)</label>
             <select className="w-full border p-3 mb-4 rounded bg-blue-50" onChange={e => setConfig({...config, defaultCapacity: parseInt(e.target.value)})}>
                 <option value={1}>1 Bed Room</option>
@@ -300,7 +311,6 @@ function BookingModal({ data, close, hostelName }) {
   const [newLeaveDate, setNewLeaveDate] = useState(bed.leaveDate || '');
   const [loading, setLoading] = useState(false);
 
-  // NEW: Calculate Refundable Live
   const refundableCalc = (parseFloat(formData.advance) || 0) - (parseFloat(formData.maintenance) || 0);
 
   const handleSubmit = async (e) => { 
@@ -328,7 +338,6 @@ function BookingModal({ data, close, hostelName }) {
                     <div className="text-green-600 font-bold">Refundable: ₹{refundAmt}</div>
                 </div>
                 
-                {/* WELCOME BUTTON */}
                 <a href={`https://wa.me/91${bed.clientMobile}?text=${encodeURIComponent(welcomeMsg)}`} target="_blank" className="flex items-center justify-center gap-2 w-full bg-green-100 text-green-700 py-2 rounded font-bold mb-4 border border-green-300">
                     <Send size={16}/> Send Welcome Message
                 </a>
@@ -349,7 +358,6 @@ function BookingModal({ data, close, hostelName }) {
             <div className="flex gap-2"><input type="date" required className="w-full border p-2 rounded" onChange={e => setFormData({...formData, joinDate: e.target.value})} /><input type="date" className="w-full border p-2 rounded" onChange={e => setFormData({...formData, leaveDate: e.target.value})} /></div>
             <div className="flex gap-2"><input type="number" required placeholder="Paid Advance ₹" className="w-full border p-2 rounded" onChange={e => setFormData({...formData, advance: e.target.value})} /><input type="number" required placeholder="Maintenance ₹" className="w-full border p-2 rounded" onChange={e => setFormData({...formData, maintenance: e.target.value})} /></div>
             
-            {/* CALCULATED REFUNDABLE SHOWING HERE */}
             <div className="text-center bg-gray-100 p-2 rounded text-sm">
                 Refundable Advance: <span className="font-bold text-green-600">₹{refundableCalc > 0 ? refundableCalc : 0}</span>
             </div>
@@ -376,7 +384,6 @@ function RentModal({ data, close }) {
         <h2 className="text-xl font-bold mb-2 text-blue-900">{bed.clientName}</h2>
         <div className="bg-gray-50 p-4 rounded mb-4"> <div>Due Date: <b>{dueDate}</b></div> <div>Total Paid: ₹{bed.advance}</div> </div>
         
-        {/* BUTTONS ALWAYS VISIBLE */}
         <a href={`https://wa.me/91${bed.clientMobile}?text=Rent%20Due!`} target="_blank" className="flex items-center justify-center gap-2 w-full border-2 border-green-500 text-green-600 py-2 rounded font-bold mb-2"> <MessageCircle size={18} /> Send Reminder </a>
         <button onClick={handleMarkPaid} className="flex items-center justify-center gap-2 w-full bg-green-600 text-white py-3 rounded font-bold"> <Banknote size={18} /> Mark Paid & WhatsApp </button>
         
