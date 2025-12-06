@@ -1,4 +1,3 @@
-// backend/server.js (Final Cloud Version with Reset Feature)
 require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
@@ -27,7 +26,6 @@ const initDB = async () => {
             hostel_name TEXT, total_floors INTEGER
         );`);
 
-        // Create Admin
         const adminPass = bcrypt.hashSync("admin123", 10);
         await pool.query(`INSERT INTO users (username, password, is_approved, setup_complete) 
             VALUES ('admin', $1, 1, 1) ON CONFLICT (username) DO NOTHING;`, [adminPass]);
@@ -53,7 +51,6 @@ const query = (text, params) => pool.query(text, params);
 
 // --- ROUTES ---
 
-// 1. Login
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
     try {
@@ -74,7 +71,6 @@ app.post('/api/login', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Admin
 app.get('/api/admin/users', async (req, res) => {
     try {
         const result = await query("SELECT id, username, hostel_name, is_approved FROM users WHERE username != 'admin'");
@@ -97,7 +93,6 @@ app.post('/api/admin/change-password', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Setup
 app.post('/api/setup', async (req, res) => {
     const { userId, hostelName, totalFloors, rooms } = req.body;
     try {
@@ -111,7 +106,6 @@ app.post('/api/setup', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- NEW: RESET HOSTEL (Fix for Duplicates) ---
 app.post('/api/reset-hostel', async (req, res) => {
     const { userId } = req.body;
     try {
@@ -122,7 +116,6 @@ app.post('/api/reset-hostel', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Dashboard
 app.get('/api/dashboard/:userId', async (req, res) => {
     try {
         const sql = `
@@ -140,7 +133,6 @@ app.get('/api/dashboard/:userId', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Actions
 app.post('/api/book', async (req, res) => {
     const { bedId, clientName, clientMobile, joinDate, leaveDate, advance, maintenance } = req.body;
     try { await query(`UPDATE beds SET is_occupied = 1, client_name = $1, client_mobile = $2, join_date = $3, leave_date = $4, advance_amount = $5, maintenance_charges = $6, last_rent_paid = NULL WHERE id = $7`, [clientName, clientMobile, joinDate, leaveDate, advance, maintenance, bedId]); res.json({ success: true }); } catch (err) { res.status(500).json({ error: err.message }); }

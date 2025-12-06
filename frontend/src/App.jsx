@@ -107,52 +107,132 @@ function AdminPanel({ user, onLogout }) {
     );
 }
 
-// --- SETUP ---
+// --- SETUP (UPDATED FOR GROUND-8th FLOOR + SMOOTH DRAG + 5 BEDS) ---
 function SetupPage({ user, onUpdate }) {
   const [step, setStep] = useState(1);
-  const [config, setConfig] = useState({ hostelName: '', floors: 3 });
+  const [config, setConfig] = useState({ hostelName: '', maxFloor: 3 }); // maxFloor is the highest floor index
   const [range, setRange] = useState({ start: '101', end: '110' });
   const [generatedRooms, setGeneratedRooms] = useState([]);
   const [selectedIndices, setSelectedIndices] = useState(new Set());
   const [isDragging, setIsDragging] = useState(false);
 
+  // Generate Floors: 0 to config.maxFloor
   const handleGenerate = () => {
     let rooms = [];
-    const start = parseInt(range.start.slice(-2)); const end = parseInt(range.end.slice(-2));
-    for (let f = 1; f <= config.floors; f++) {
-      for (let r = start; r <= end; r++) rooms.push({ floor: f, roomNo: `${f}${r.toString().padStart(2, '0')}`, capacity: 2 });
+    const start = parseInt(range.start.slice(-2)); 
+    const end = parseInt(range.end.slice(-2));
+    
+    // Loop from 0 (Ground) to Max Floor
+    for (let f = 0; f <= config.maxFloor; f++) {
+      for (let r = start; r <= end; r++) {
+        // If floor is 0, use 'G' + number, else use floor number
+        const roomPrefix = f === 0 ? 'G' : f;
+        const roomNo = `${roomPrefix}${r.toString().padStart(2, '0')}`;
+        rooms.push({ floor: f, roomNo: roomNo, capacity: 2 });
+      }
     }
-    setGeneratedRooms(rooms); setStep(2);
+    setGeneratedRooms(rooms); 
+    setStep(2);
   };
 
-  const handleMouseDown = (i) => { setIsDragging(true); setSelectedIndices(new Set([i])); };
-  const handleMouseEnter = (i) => { if (isDragging) { const s = new Set(selectedIndices); s.add(i); setSelectedIndices(s); } };
-  const applyCap = (cap) => { const u = generatedRooms.map((r, i) => selectedIndices.has(i) ? { ...r, capacity: cap } : r); setGeneratedRooms(u); setSelectedIndices(new Set()); };
+  // Drag Logic - Improved to be simple & robust
+  const handleMouseDown = (i, e) => { 
+      // Prevent text selection
+      e.preventDefault(); 
+      setIsDragging(true); 
+      // Start fresh selection or add to it? Let's assume start new for simplicity
+      const s = new Set();
+      s.add(i);
+      setSelectedIndices(s); 
+  };
+  
+  const handleMouseEnter = (i) => { 
+      if (isDragging) { 
+          const s = new Set(selectedIndices); 
+          s.add(i); 
+          setSelectedIndices(s); 
+      } 
+  };
+  
+  const handleMouseUp = () => setIsDragging(false);
+
+  const applyCap = (cap) => { 
+      const u = generatedRooms.map((r, i) => selectedIndices.has(i) ? { ...r, capacity: cap } : r); 
+      setGeneratedRooms(u); 
+      setSelectedIndices(new Set()); 
+  };
+
   const submitSetup = async () => { 
-      await axios.post(`${API}/setup`, { userId: user.id, hostelName: config.hostelName, totalFloors: config.floors, rooms: generatedRooms }); 
+      await axios.post(`${API}/setup`, { userId: user.id, hostelName: config.hostelName, totalFloors: config.maxFloor + 1, rooms: generatedRooms }); 
       onUpdate({ ...user, setup_complete: 1, hostel_name: config.hostelName }); 
   };
-  const getColor = (c) => c===1?'bg-gray-100':c===2?'bg-blue-50 text-blue-700':c===3?'bg-purple-50 text-purple-700':'bg-orange-50 text-orange-700';
+  
+  const getColor = (c) => {
+      if(c===1) return 'bg-gray-100';
+      if(c===2) return 'bg-blue-50 text-blue-700';
+      if(c===3) return 'bg-purple-50 text-purple-700';
+      if(c===4) return 'bg-orange-50 text-orange-700';
+      return 'bg-pink-50 text-pink-700'; // 5 Beds
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col" onMouseUp={() => setIsDragging(false)}>
+    <div className="min-h-screen bg-gray-50 flex flex-col" onMouseUp={handleMouseUp}>
       <div className="bg-white shadow p-4 mb-6 text-center text-2xl font-bold">Setup Hostel</div>
       <div className="flex-1 max-w-6xl w-full mx-auto p-4">
         {step === 1 && (
           <div className="bg-white p-8 rounded shadow max-w-lg mx-auto mt-10">
-            <label className="block font-bold">Hostel Name</label><input className="w-full border p-3 mb-4 rounded" onChange={e => setConfig({...config, hostelName: e.target.value})} />
-            <label className="block font-bold">Floors</label><select className="w-full border p-3 mb-4" onChange={e => setConfig({...config, floors: parseInt(e.target.value)})}>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n}</option>)}</select>
-            <div className="flex gap-2 mb-6"><input className="border p-3 w-1/2" placeholder="Start (101)" onChange={e => setRange({...range, start: e.target.value})} /><input className="border p-3 w-1/2" placeholder="End (110)" onChange={e => setRange({...range, end: e.target.value})} /></div>
-            <button onClick={handleGenerate} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Next</button>
+            <label className="block font-bold mb-2">Hostel Name</label>
+            <input className="w-full border p-3 mb-4 rounded" onChange={e => setConfig({...config, hostelName: e.target.value})} />
+            
+            <label className="block font-bold mb-2">How many floors?</label>
+            <select className="w-full border p-3 mb-4 rounded" onChange={e => setConfig({...config, maxFloor: parseInt(e.target.value)})}>
+                <option value={0}>Ground Floor Only</option>
+                <option value={1}>Ground + 1st Floor</option>
+                <option value={2}>Ground + 2 Floors</option>
+                <option value={3} selected>Ground + 3 Floors</option>
+                <option value={4}>Ground + 4 Floors</option>
+                <option value={5}>Ground + 5 Floors</option>
+                <option value={6}>Ground + 6 Floors</option>
+                <option value={7}>Ground + 7 Floors</option>
+                <option value={8}>Ground + 8 Floors</option>
+            </select>
+
+            <label className="block font-bold mb-2">Room Numbers per Floor (e.g., 01 to 10)</label>
+            <div className="flex gap-2 mb-6">
+                <input className="border p-3 w-1/2 rounded" placeholder="Start (e.g., 01)" onChange={e => setRange({...range, start: e.target.value})} />
+                <input className="border p-3 w-1/2 rounded" placeholder="End (e.g., 10)" onChange={e => setRange({...range, end: e.target.value})} />
+            </div>
+            <button onClick={handleGenerate} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Next: Configure Beds</button>
           </div>
         )}
         {step === 2 && (
           <div className="flex gap-6 h-[calc(100vh-150px)]">
-            <div className="flex-1 overflow-y-auto bg-white p-6 rounded shadow border grid grid-cols-6 gap-3 select-none">
-                 {generatedRooms.map((r, i) => <div key={i} onMouseDown={()=>handleMouseDown(i)} onMouseEnter={()=>handleMouseEnter(i)} className={`p-3 border-2 cursor-pointer flex flex-col items-center justify-center h-20 rounded ${selectedIndices.has(i) ? 'bg-blue-600 text-white' : getColor(r.capacity)}`}><span className="font-bold">{r.roomNo}</span><span className="text-xs">{r.capacity} Beds</span></div>)}
+            <div className="flex-1 overflow-y-auto bg-white p-6 rounded shadow border select-none">
+                 <div className="mb-2 text-sm text-gray-500 flex gap-2 items-center"><MousePointer2 size={16}/> Click & Drag to select multiple rooms</div>
+                 <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                     {generatedRooms.map((r, i) => (
+                         <div 
+                            key={i} 
+                            onMouseDown={(e)=>handleMouseDown(i, e)} 
+                            onMouseEnter={()=>handleMouseEnter(i)} 
+                            className={`p-3 border-2 cursor-pointer flex flex-col items-center justify-center h-20 rounded transition 
+                                ${selectedIndices.has(i) ? 'bg-blue-600 text-white border-blue-800' : getColor(r.capacity)}`}
+                         >
+                            <span className="font-bold">{r.roomNo}</span>
+                            <span className="text-xs">{r.capacity} Beds</span>
+                         </div>
+                     ))}
+                 </div>
             </div>
             <div className="w-64 flex flex-col gap-2">
-              <div className="bg-white p-4 rounded shadow border"><h3 className="font-bold mb-2">Set Beds</h3>{[1,2,3,4].map(n => <button key={n} onClick={()=>applyCap(n)} className="w-full p-2 border mb-1 bg-gray-50 hover:bg-gray-100">{n} Beds</button>)}</div>
+              <div className="bg-white p-4 rounded shadow border">
+                  <h3 className="font-bold mb-2">Set Beds</h3>
+                  {[1,2,3,4,5].map(n => (
+                      <button key={n} onClick={()=>applyCap(n)} className="w-full p-2 border mb-1 bg-gray-50 hover:bg-gray-100 font-bold text-gray-700">
+                          {n} Sharing
+                      </button>
+                  ))}
+              </div>
               <button onClick={submitSetup} className="w-full bg-green-600 text-white py-3 rounded font-bold text-lg mt-auto">Save & Finish</button>
             </div>
           </div>
@@ -162,7 +242,7 @@ function SetupPage({ user, onUpdate }) {
   );
 }
 
-// --- DASHBOARD (With RESET Button) ---
+// --- DASHBOARD ---
 function Dashboard({ user, onLogout }) {
   const [rooms, setRooms] = useState([]);
   const [activeTab, setActiveTab] = useState('overview'); 
@@ -193,14 +273,16 @@ function Dashboard({ user, onLogout }) {
       <div className="p-6 max-w-7xl mx-auto w-full">
         {Object.entries(groupBy(rooms, 'floor')).map(([floor, floorRooms]) => (
             <div key={floor} className="mb-8">
-                <h2 className="text-lg font-bold text-gray-500 mb-3 border-b-2">FLOOR {floor}</h2>
+                <h2 className="text-lg font-bold text-gray-500 mb-3 border-b-2">
+                    {parseInt(floor) === 0 ? "GROUND FLOOR" : `FLOOR ${floor}`}
+                </h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                     {floorRooms.map(room => (
                         <div key={room.id} className="bg-white p-3 rounded-lg shadow border-t-4 border-blue-500">
                             <div className="font-bold text-center mb-2">{room.number}</div>
                             <div className="flex justify-center gap-2 flex-wrap">
                                 {room.beds.map((bed, i) => {
-                                    if(activeTab === 'rent' && !bed.isOccupied) return null; // Hide empty in rent mode
+                                    if(activeTab === 'rent' && !bed.isOccupied) return null; 
                                     const isPaid = bed.lastRentPaid === getCurrentMonth();
                                     if(activeTab === 'rent' && rentFilter === 'paid' && !isPaid) return null;
                                     if(activeTab === 'rent' && rentFilter === 'unpaid' && isPaid) return null;
