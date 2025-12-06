@@ -3,7 +3,7 @@ import axios from 'axios';
 import { BedDouble, LogOut, Search, MessageCircle, Banknote, UserMinus, MousePointer2, Users, Calendar, ShieldCheck, Lock } from 'lucide-react';
 
 // --- CONFIG ---
-const API = "http://localhost:5000/api";
+const API = "https://hostel-backend-xyz.onrender.com/api";
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
 
 export default function App() {
