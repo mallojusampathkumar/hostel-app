@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { BedDouble, LogOut, Search, MessageCircle, Banknote, UserMinus, MousePointer2, Users, Calendar, ShieldCheck, Lock, RefreshCw } from 'lucide-react';
+import { BedDouble, LogOut, Search, MessageCircle, Banknote, UserMinus, MousePointer2, Users, Calendar, ShieldCheck, Lock, RefreshCw, Loader2, Send } from 'lucide-react';
 
 // --- CONFIGURATION ---
 const API = "https://hostel-backend-0dev.onrender.com/api"; 
@@ -30,10 +30,12 @@ export default function App() {
 function LoginPage({ onLogin }) {
   const [creds, setCreds] = useState({ username: '', password: '' });
   const [msg, setMsg] = useState({ text: '', type: '' });
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMsg({ text: '', type: '' });
+    setLoading(true);
     try {
       const res = await axios.post(`${API}/login`, creds);
       onLogin(res.data);
@@ -45,6 +47,8 @@ function LoginPage({ onLogin }) {
       } else {
         setMsg({ text: "Login failed.", type: 'error' });
       }
+    } finally {
+        setLoading(false);
     }
   };
 
@@ -55,7 +59,9 @@ function LoginPage({ onLogin }) {
         {msg.text && <div className={`p-3 rounded mb-4 text-sm ${msg.type === 'success' ? 'bg-green-100' : 'bg-red-100'}`}>{msg.text}</div>}
         <input className="w-full p-2 border mb-2 rounded" placeholder="Username" onChange={e => setCreds({...creds, username: e.target.value})} />
         <input className="w-full p-2 border mb-4 rounded" type="password" placeholder="Password" onChange={e => setCreds({...creds, password: e.target.value})} />
-        <button className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 font-bold">Login / Register</button>
+        <button disabled={loading} className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 font-bold flex justify-center gap-2">
+            {loading ? <Loader2 className="animate-spin"/> : "Login / Register"}
+        </button>
       </form>
     </div>
   );
@@ -107,64 +113,46 @@ function AdminPanel({ user, onLogout }) {
     );
 }
 
-// --- SETUP (UPDATED FOR GROUND-8th FLOOR + SMOOTH DRAG + 5 BEDS) ---
+// --- SETUP (UPDATED with Defaults & Loading) ---
 function SetupPage({ user, onUpdate }) {
   const [step, setStep] = useState(1);
-  const [config, setConfig] = useState({ hostelName: '', maxFloor: 3 }); // maxFloor is the highest floor index
+  const [config, setConfig] = useState({ hostelName: '', maxFloor: 3, defaultCapacity: 2 });
   const [range, setRange] = useState({ start: '101', end: '110' });
   const [generatedRooms, setGeneratedRooms] = useState([]);
   const [selectedIndices, setSelectedIndices] = useState(new Set());
   const [isDragging, setIsDragging] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  // Generate Floors: 0 to config.maxFloor
+  // Generate Floors
   const handleGenerate = () => {
     let rooms = [];
     const start = parseInt(range.start.slice(-2)); 
     const end = parseInt(range.end.slice(-2));
-    
-    // Loop from 0 (Ground) to Max Floor
     for (let f = 0; f <= config.maxFloor; f++) {
       for (let r = start; r <= end; r++) {
-        // If floor is 0, use 'G' + number, else use floor number
         const roomPrefix = f === 0 ? 'G' : f;
         const roomNo = `${roomPrefix}${r.toString().padStart(2, '0')}`;
-        rooms.push({ floor: f, roomNo: roomNo, capacity: 2 });
+        // USE DEFAULT CAPACITY HERE TO SAVE TIME
+        rooms.push({ floor: f, roomNo: roomNo, capacity: config.defaultCapacity });
       }
     }
     setGeneratedRooms(rooms); 
     setStep(2);
   };
 
-  // Drag Logic - Improved to be simple & robust
-  const handleMouseDown = (i, e) => { 
-      // Prevent text selection
-      e.preventDefault(); 
-      setIsDragging(true); 
-      // Start fresh selection or add to it? Let's assume start new for simplicity
-      const s = new Set();
-      s.add(i);
-      setSelectedIndices(s); 
-  };
+  const handleMouseDown = (i, e) => { e.preventDefault(); setIsDragging(true); setSelectedIndices(new Set([i])); };
+  const handleMouseEnter = (i) => { if (isDragging) { const s = new Set(selectedIndices); s.add(i); setSelectedIndices(s); } };
+  const applyCap = (cap) => { const u = generatedRooms.map((r, i) => selectedIndices.has(i) ? { ...r, capacity: cap } : r); setGeneratedRooms(u); setSelectedIndices(new Set()); };
   
-  const handleMouseEnter = (i) => { 
-      if (isDragging) { 
-          const s = new Set(selectedIndices); 
-          s.add(i); 
-          setSelectedIndices(s); 
-      } 
-  };
-  
-  const handleMouseUp = () => setIsDragging(false);
-
-  const applyCap = (cap) => { 
-      const u = generatedRooms.map((r, i) => selectedIndices.has(i) ? { ...r, capacity: cap } : r); 
-      setGeneratedRooms(u); 
-      setSelectedIndices(new Set()); 
-  };
-
   const submitSetup = async () => { 
-      await axios.post(`${API}/setup`, { userId: user.id, hostelName: config.hostelName, totalFloors: config.maxFloor + 1, rooms: generatedRooms }); 
-      onUpdate({ ...user, setup_complete: 1, hostel_name: config.hostelName }); 
+      setLoading(true); // START LOADING
+      try {
+        await axios.post(`${API}/setup`, { userId: user.id, hostelName: config.hostelName, totalFloors: config.maxFloor + 1, rooms: generatedRooms }); 
+        onUpdate({ ...user, setup_complete: 1, hostel_name: config.hostelName }); 
+      } catch(e) { 
+        alert("Error saving setup"); 
+        setLoading(false);
+      }
   };
   
   const getColor = (c) => {
@@ -172,11 +160,11 @@ function SetupPage({ user, onUpdate }) {
       if(c===2) return 'bg-blue-50 text-blue-700';
       if(c===3) return 'bg-purple-50 text-purple-700';
       if(c===4) return 'bg-orange-50 text-orange-700';
-      return 'bg-pink-50 text-pink-700'; // 5 Beds
+      return 'bg-pink-50 text-pink-700';
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col" onMouseUp={handleMouseUp}>
+    <div className="min-h-screen bg-gray-50 flex flex-col" onMouseUp={() => setIsDragging(false)}>
       <div className="bg-white shadow p-4 mb-6 text-center text-2xl font-bold">Setup Hostel</div>
       <div className="flex-1 max-w-6xl w-full mx-auto p-4">
         {step === 1 && (
@@ -191,18 +179,25 @@ function SetupPage({ user, onUpdate }) {
                 <option value={2}>Ground + 2 Floors</option>
                 <option value={3} selected>Ground + 3 Floors</option>
                 <option value={4}>Ground + 4 Floors</option>
-                <option value={5}>Ground + 5 Floors</option>
-                <option value={6}>Ground + 6 Floors</option>
-                <option value={7}>Ground + 7 Floors</option>
                 <option value={8}>Ground + 8 Floors</option>
             </select>
 
-            <label className="block font-bold mb-2">Room Numbers per Floor (e.g., 01 to 10)</label>
+            {/* NEW: Default Capacity */}
+            <label className="block font-bold mb-2 text-blue-800">Default Sharing (Auto-fill)</label>
+            <select className="w-full border p-3 mb-4 rounded bg-blue-50" onChange={e => setConfig({...config, defaultCapacity: parseInt(e.target.value)})}>
+                <option value={1}>1 Bed Room</option>
+                <option value={2} selected>2 Sharing</option>
+                <option value={3}>3 Sharing</option>
+                <option value={4}>4 Sharing</option>
+                <option value={5}>5 Sharing</option>
+            </select>
+
+            <label className="block font-bold mb-2">Room Numbers (e.g., 01 to 10)</label>
             <div className="flex gap-2 mb-6">
                 <input className="border p-3 w-1/2 rounded" placeholder="Start (e.g., 01)" onChange={e => setRange({...range, start: e.target.value})} />
                 <input className="border p-3 w-1/2 rounded" placeholder="End (e.g., 10)" onChange={e => setRange({...range, end: e.target.value})} />
             </div>
-            <button onClick={handleGenerate} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Next: Configure Beds</button>
+            <button onClick={handleGenerate} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Next: Review Rooms</button>
           </div>
         )}
         {step === 2 && (
@@ -211,12 +206,8 @@ function SetupPage({ user, onUpdate }) {
                  <div className="mb-2 text-sm text-gray-500 flex gap-2 items-center"><MousePointer2 size={16}/> Click & Drag to select multiple rooms</div>
                  <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
                      {generatedRooms.map((r, i) => (
-                         <div 
-                            key={i} 
-                            onMouseDown={(e)=>handleMouseDown(i, e)} 
-                            onMouseEnter={()=>handleMouseEnter(i)} 
-                            className={`p-3 border-2 cursor-pointer flex flex-col items-center justify-center h-20 rounded transition 
-                                ${selectedIndices.has(i) ? 'bg-blue-600 text-white border-blue-800' : getColor(r.capacity)}`}
+                         <div key={i} onMouseDown={(e)=>handleMouseDown(i, e)} onMouseEnter={()=>handleMouseEnter(i)} 
+                            className={`p-3 border-2 cursor-pointer flex flex-col items-center justify-center h-20 rounded transition ${selectedIndices.has(i) ? 'bg-blue-600 text-white border-blue-800' : getColor(r.capacity)}`}
                          >
                             <span className="font-bold">{r.roomNo}</span>
                             <span className="text-xs">{r.capacity} Beds</span>
@@ -227,13 +218,11 @@ function SetupPage({ user, onUpdate }) {
             <div className="w-64 flex flex-col gap-2">
               <div className="bg-white p-4 rounded shadow border">
                   <h3 className="font-bold mb-2">Set Beds</h3>
-                  {[1,2,3,4,5].map(n => (
-                      <button key={n} onClick={()=>applyCap(n)} className="w-full p-2 border mb-1 bg-gray-50 hover:bg-gray-100 font-bold text-gray-700">
-                          {n} Sharing
-                      </button>
-                  ))}
+                  {[1,2,3,4,5].map(n => <button key={n} onClick={()=>applyCap(n)} className="w-full p-2 border mb-1 bg-gray-50 hover:bg-gray-100 font-bold text-gray-700">{n} Sharing</button>)}
               </div>
-              <button onClick={submitSetup} className="w-full bg-green-600 text-white py-3 rounded font-bold text-lg mt-auto">Save & Finish</button>
+              <button disabled={loading} onClick={submitSetup} className="w-full bg-green-600 text-white py-3 rounded font-bold text-lg mt-auto flex justify-center gap-2">
+                  {loading ? <Loader2 className="animate-spin"/> : "Save & Finish"}
+              </button>
             </div>
           </div>
         )}
@@ -252,7 +241,7 @@ function Dashboard({ user, onLogout }) {
   useEffect(() => { axios.get(`${API}/dashboard/${user.id}`).then(res => setRooms(res.data)); }, []);
   
   const handleReset = async () => {
-      if(confirm("⚠ WARNING: This will DELETE all rooms/tenants to fix duplicates. Are you sure?")) {
+      if(confirm("⚠ DELETE ALL DATA? Use this to fix layout mistakes.")) {
           await axios.post(`${API}/reset-hostel`, { userId: user.id });
           localStorage.setItem('hostelUser', JSON.stringify({ ...user, setup_complete: 0 }));
           window.location.reload();
@@ -273,9 +262,7 @@ function Dashboard({ user, onLogout }) {
       <div className="p-6 max-w-7xl mx-auto w-full">
         {Object.entries(groupBy(rooms, 'floor')).map(([floor, floorRooms]) => (
             <div key={floor} className="mb-8">
-                <h2 className="text-lg font-bold text-gray-500 mb-3 border-b-2">
-                    {parseInt(floor) === 0 ? "GROUND FLOOR" : `FLOOR ${floor}`}
-                </h2>
+                <h2 className="text-lg font-bold text-gray-500 mb-3 border-b-2">{parseInt(floor) === 0 ? "GROUND FLOOR" : `FLOOR ${floor}`}</h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                     {floorRooms.map(room => (
                         <div key={room.id} className="bg-white p-3 rounded-lg shadow border-t-4 border-blue-500">
@@ -300,27 +287,52 @@ function Dashboard({ user, onLogout }) {
             </div>
         ))}
       </div>
-      {modalData && modalData.type === 'booking' && <BookingModal data={modalData} close={() => { setModalData(null); window.location.reload(); }} />}
+      {modalData && modalData.type === 'booking' && <BookingModal data={modalData} hostelName={user.hostel_name} close={() => { setModalData(null); window.location.reload(); }} />}
       {modalData && modalData.type === 'rent' && <RentModal data={modalData} close={() => { setModalData(null); window.location.reload(); }} />}
     </div>
   );
 }
 
 // --- MODALS ---
-function BookingModal({ data, close }) {
+function BookingModal({ data, close, hostelName }) {
   const { bed, room } = data;
   const [formData, setFormData] = useState({ clientName: '', clientMobile: '', joinDate: '', leaveDate: '', advance: '', maintenance: '' });
   const [newLeaveDate, setNewLeaveDate] = useState(bed.leaveDate || '');
-  const handleSubmit = async (e) => { e.preventDefault(); await axios.post(`${API}/book`, { ...formData, bedId: bed.id }); close(); };
+  const [loading, setLoading] = useState(false);
+
+  // NEW: Calculate Refundable Live
+  const refundableCalc = (parseFloat(formData.advance) || 0) - (parseFloat(formData.maintenance) || 0);
+
+  const handleSubmit = async (e) => { 
+      e.preventDefault(); 
+      setLoading(true);
+      try { await axios.post(`${API}/book`, { ...formData, bedId: bed.id }); close(); } 
+      catch(e){ alert("Error"); setLoading(false); }
+  };
+  
   const handleUpdateDate = async () => { await axios.post(`${API}/update-leave`, { bedId: bed.id, leaveDate: newLeaveDate }); close(); };
   const handleVacate = async () => { if(confirm("Vacate tenant?")) { await axios.post(`${API}/vacate`, { bedId: bed.id }); close(); } };
 
+  const welcomeMsg = `Welcome to ${hostelName}! Room: ${room.number}, Bed: ${bed.bed_index+1}. Rent is due on the ${new Date(bed.joinDate).getDate()}th.`;
+
   if (bed.isOccupied) {
+      const refundAmt = (bed.advance || 0) - (bed.maintenance || 0);
       return (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
                 <div className="flex justify-between items-center mb-4 border-b pb-2"> <h2 className="text-xl font-bold">Room {room.number}</h2> <button onClick={close}>✕</button> </div>
-                <div className="space-y-2 mb-4 bg-gray-50 p-4 rounded"> <div>Name: <b>{bed.clientName}</b></div> <div>Mobile: {bed.clientMobile}</div> <div>Join: {bed.joinDate}</div> </div>
+                <div className="space-y-2 mb-4 bg-gray-50 p-4 rounded"> 
+                    <div>Name: <b>{bed.clientName}</b></div> 
+                    <div>Mobile: {bed.clientMobile}</div> 
+                    <div>Join: {bed.joinDate}</div> 
+                    <div className="text-green-600 font-bold">Refundable: ₹{refundAmt}</div>
+                </div>
+                
+                {/* WELCOME BUTTON */}
+                <a href={`https://wa.me/91${bed.clientMobile}?text=${encodeURIComponent(welcomeMsg)}`} target="_blank" className="flex items-center justify-center gap-2 w-full bg-green-100 text-green-700 py-2 rounded font-bold mb-4 border border-green-300">
+                    <Send size={16}/> Send Welcome Message
+                </a>
+
                 <div className="mb-4"> <label className="text-xs font-bold">Set Leaving Date (Turns Orange)</label> <div className="flex gap-2"> <input type="date" className="border p-2 rounded flex-1" value={newLeaveDate} onChange={e => setNewLeaveDate(e.target.value)} /> <button onClick={handleUpdateDate} className="bg-blue-600 text-white px-4 rounded font-bold">Save</button> </div> </div>
                 <button onClick={handleVacate} className="w-full bg-red-100 text-red-600 py-3 rounded font-bold flex items-center justify-center gap-2"> <UserMinus size={18} /> Vacate Tenant </button>
             </div>
@@ -335,8 +347,16 @@ function BookingModal({ data, close }) {
             <input required placeholder="Name" className="w-full border p-2 rounded" onChange={e => setFormData({...formData, clientName: e.target.value})} />
             <input placeholder="Mobile" className="w-full border p-2 rounded" onChange={e => setFormData({...formData, clientMobile: e.target.value})} />
             <div className="flex gap-2"><input type="date" required className="w-full border p-2 rounded" onChange={e => setFormData({...formData, joinDate: e.target.value})} /><input type="date" className="w-full border p-2 rounded" onChange={e => setFormData({...formData, leaveDate: e.target.value})} /></div>
-            <div className="flex gap-2"><input type="number" required placeholder="Advance ₹" className="w-full border p-2 rounded" onChange={e => setFormData({...formData, advance: e.target.value})} /><input type="number" required placeholder="Maintenance ₹" className="w-full border p-2 rounded" onChange={e => setFormData({...formData, maintenance: e.target.value})} /></div>
-            <button className="w-full bg-blue-600 text-white py-3 rounded font-bold">Confirm</button>
+            <div className="flex gap-2"><input type="number" required placeholder="Paid Advance ₹" className="w-full border p-2 rounded" onChange={e => setFormData({...formData, advance: e.target.value})} /><input type="number" required placeholder="Maintenance ₹" className="w-full border p-2 rounded" onChange={e => setFormData({...formData, maintenance: e.target.value})} /></div>
+            
+            {/* CALCULATED REFUNDABLE SHOWING HERE */}
+            <div className="text-center bg-gray-100 p-2 rounded text-sm">
+                Refundable Advance: <span className="font-bold text-green-600">₹{refundableCalc > 0 ? refundableCalc : 0}</span>
+            </div>
+
+            <button disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded font-bold flex justify-center gap-2">
+                {loading ? <Loader2 className="animate-spin"/> : "Confirm Booking"}
+            </button>
         </form>
         <button onClick={close} className="mt-2 text-gray-500 w-full text-center">Cancel</button>
       </div>
@@ -355,8 +375,11 @@ function RentModal({ data, close }) {
       <div className="bg-white rounded-lg p-6 w-full max-w-md">
         <h2 className="text-xl font-bold mb-2 text-blue-900">{bed.clientName}</h2>
         <div className="bg-gray-50 p-4 rounded mb-4"> <div>Due Date: <b>{dueDate}</b></div> <div>Total Paid: ₹{bed.advance}</div> </div>
+        
+        {/* BUTTONS ALWAYS VISIBLE */}
         <a href={`https://wa.me/91${bed.clientMobile}?text=Rent%20Due!`} target="_blank" className="flex items-center justify-center gap-2 w-full border-2 border-green-500 text-green-600 py-2 rounded font-bold mb-2"> <MessageCircle size={18} /> Send Reminder </a>
         <button onClick={handleMarkPaid} className="flex items-center justify-center gap-2 w-full bg-green-600 text-white py-3 rounded font-bold"> <Banknote size={18} /> Mark Paid & WhatsApp </button>
+        
         <button onClick={close} className="mt-2 w-full text-center text-gray-500">Close</button>
       </div>
     </div>
