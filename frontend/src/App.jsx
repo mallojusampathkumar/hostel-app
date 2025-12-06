@@ -3,7 +3,7 @@ import axios from 'axios';
 import { BedDouble, LogOut, Search, MessageCircle, Banknote, UserMinus, MousePointer2, Users, Calendar, ShieldCheck, Lock } from 'lucide-react';
 
 // --- CONFIGURATION ---
-// 👇 THIS IS THE IMPORTANT LINE WE UPDATED 👇
+// 👇 ENSURE THIS IS YOUR RENDER URL 👇
 const API = "https://hostel-backend-0dev.onrender.com/api"; 
 
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
@@ -74,8 +74,6 @@ function LoginPage({ onLogin }) {
 }
 
 // --- 2. SUPER ADMIN PANEL ---
-
-// --- 2. SUPER ADMIN PANEL (Updated with Password Change) ---
 function AdminPanel({ user, onLogout }) {
     const [owners, setOwners] = useState([]);
     const [newPass, setNewPass] = useState("");
@@ -112,24 +110,15 @@ function AdminPanel({ user, onLogout }) {
             </div>
 
             <div className="p-8 max-w-4xl mx-auto">
-                
                 {/* Security Section */}
                 <div className="bg-white p-6 rounded shadow mb-8 border-l-4 border-red-500">
                     <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><Lock size={18}/> Security Settings</h3>
                     <div className="flex gap-4 items-end">
                         <div className="flex-1">
                             <label className="text-xs font-bold text-gray-500 uppercase">New Admin Password</label>
-                            <input 
-                                type="text" 
-                                className="w-full border p-2 rounded" 
-                                placeholder="Enter new strong password"
-                                value={newPass}
-                                onChange={(e) => setNewPass(e.target.value)}
-                            />
+                            <input type="text" className="w-full border p-2 rounded" placeholder="Enter new strong password" value={newPass} onChange={(e) => setNewPass(e.target.value)} />
                         </div>
-                        <button onClick={handleChangePassword} className="bg-red-600 text-white px-6 py-2 rounded font-bold hover:bg-red-700 h-10">
-                            Update Password
-                        </button>
+                        <button onClick={handleChangePassword} className="bg-red-600 text-white px-6 py-2 rounded font-bold hover:bg-red-700 h-10">Update Password</button>
                     </div>
                 </div>
 
@@ -206,7 +195,14 @@ function SetupPage({ user, onUpdate }) {
   const handleMouseUp = () => setIsDragging(false);
   const applyBulkCapacity = (cap) => { const updated = generatedRooms.map((room, idx) => { if (selectedIndices.has(idx)) return { ...room, capacity: cap }; return room; }); setGeneratedRooms(updated); setSelectedIndices(new Set()); };
   const selectAll = () => { const all = generatedRooms.map((_, i) => i); setSelectedIndices(new Set(all)); };
-  const submitSetup = async () => { await axios.post(`${API}/setup`, { userId: user.id, hostelName: config.hostelName, totalFloors: config.floors, rooms: generatedRooms }); onUpdate({ ...user, setup_complete: 1 }); };
+  
+  // 👇 THIS FUNCTION IS FIXED 👇
+  const submitSetup = async () => { 
+    await axios.post(`${API}/setup`, { userId: user.id, hostelName: config.hostelName, totalFloors: config.floors, rooms: generatedRooms }); 
+    // Now we explicitly update the hostel_name in the local user state
+    onUpdate({ ...user, setup_complete: 1, hostel_name: config.hostelName }); 
+  };
+  
   const getCapacityColor = (cap) => { if (cap === 1) return 'bg-gray-100 text-gray-600 border-gray-300'; if (cap === 2) return 'bg-blue-50 text-blue-600 border-blue-200'; if (cap === 3) return 'bg-purple-50 text-purple-600 border-purple-200'; return 'bg-orange-50 text-orange-600 border-orange-200'; };
 
   return (
