@@ -67,7 +67,7 @@ function LoginPage({ onLogin }) {
   );
 }
 
-// --- ADMIN (Updated with DELETE Button) ---
+// --- ADMIN ---
 function AdminPanel({ user, onLogout }) {
     const [owners, setOwners] = useState([]);
     const [newPass, setNewPass] = useState("");
@@ -130,7 +130,7 @@ function AdminPanel({ user, onLogout }) {
     );
 }
 
-// --- SETUP ---
+// --- SETUP (FIXED: Added Floors 5, 6, 7) ---
 function SetupPage({ user, onUpdate }) {
   const [step, setStep] = useState(1);
   const [config, setConfig] = useState({ hostelName: '', maxFloor: 3, defaultCapacity: 2 });
@@ -185,12 +185,16 @@ function SetupPage({ user, onUpdate }) {
             <input className="w-full border p-3 mb-4 rounded" onChange={e => setConfig({...config, hostelName: e.target.value})} />
             
             <label className="block font-bold mb-2">How many floors?</label>
+            {/* 👇 FIXED DROPDOWN LIST 👇 */}
             <select className="w-full border p-3 mb-4 rounded" onChange={e => setConfig({...config, maxFloor: parseInt(e.target.value)})}>
                 <option value={0}>Ground Floor Only</option>
                 <option value={1}>Ground + 1st Floor</option>
                 <option value={2}>Ground + 2 Floors</option>
                 <option value={3} selected>Ground + 3 Floors</option>
                 <option value={4}>Ground + 4 Floors</option>
+                <option value={5}>Ground + 5 Floors</option>
+                <option value={6}>Ground + 6 Floors</option>
+                <option value={7}>Ground + 7 Floors</option>
                 <option value={8}>Ground + 8 Floors</option>
             </select>
 
