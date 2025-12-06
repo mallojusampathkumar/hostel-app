@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { BedDouble, LogOut, Search, MessageCircle, Banknote, UserMinus, MousePointer2, Users, Calendar, ShieldCheck, Lock } from 'lucide-react';
 
-// --- CONFIG ---
-const API = "https://hostel-backend-xyz.onrender.com/api";
+// --- CONFIGURATION ---
+// 👇 THIS IS THE IMPORTANT LINE WE UPDATED 👇
+const API = "https://hostel-backend-0dev.onrender.com/api"; 
+
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
 
 export default function App() {
@@ -46,7 +48,7 @@ function LoginPage({ onLogin }) {
       } else if (err.response && err.response.data.error === "NOT_APPROVED") {
         setMsg({ text: "Account pending approval. Please contact Admin.", type: 'error' });
       } else {
-        setMsg({ text: "Invalid Username or Password", type: 'error' });
+        setMsg({ text: "Login failed. Check username/password.", type: 'error' });
       }
     }
   };
@@ -82,7 +84,6 @@ function AdminPanel({ user, onLogout }) {
     const toggleStatus = async (userId, currentStatus) => {
         const newStatus = currentStatus === 1 ? 0 : 1;
         await axios.post(`${API}/admin/approve`, { userId, status: newStatus });
-        // Refresh list
         const res = await axios.get(`${API}/admin/users`);
         setOwners(res.data);
     };
@@ -142,7 +143,7 @@ function AdminPanel({ user, onLogout }) {
     );
 }
 
-// --- 3. SETUP COMPONENT (Standard) ---
+// --- 3. SETUP COMPONENT ---
 function SetupPage({ user, onUpdate }) {
   const [step, setStep] = useState(1);
   const [config, setConfig] = useState({ hostelName: '', floors: 3 });
@@ -205,7 +206,7 @@ function SetupPage({ user, onUpdate }) {
   );
 }
 
-// --- 4. DASHBOARD COMPONENT (Standard) ---
+// --- 4. DASHBOARD COMPONENT ---
 function Dashboard({ user, onLogout }) {
   const [rooms, setRooms] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -287,7 +288,7 @@ function Dashboard({ user, onLogout }) {
   );
 }
 
-// --- 5. MODALS (Unchanged logic, just simplified render for brevity if needed) ---
+// --- 5. MODALS ---
 function BookingModal({ data, close }) {
   const { bed, room } = data;
   const [formData, setFormData] = useState({ clientName: '', clientMobile: '', joinDate: '', leaveDate: '', advance: '', maintenance: '' });
