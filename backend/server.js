@@ -158,4 +158,53 @@ app.post('/api/pay-rent', async (req, res) => { try { await query(`UPDATE beds S
 app.post('/api/vacate', async (req, res) => { try { await query(`UPDATE beds SET is_occupied = 0, client_name = NULL, client_mobile = NULL, join_date = NULL, leave_date = NULL, advance_amount = NULL, maintenance_charges = NULL, last_rent_paid = NULL WHERE id = $1`, [req.body.bedId]); res.json({ success: true }); } catch (err) { res.status(500).json({ error: err.message }); } });
 
 const PORT = process.env.PORT || 5000;
+// --- NEW: BULK IMPORT (Smart Assign) ---
+app.post('/api/import-data', async (req, res) => {
+    const { userId, tenants } = req.body; // tenants = [{ roomNo: "101", name: "Raju", mobile: "98..." }]
+    
+    try {
+        let successCount = 0;
+        let errors = [];
+
+        for (const tenant of tenants) {
+            // 1. Find the Room ID for this Room Number
+            const roomRes = await query(
+                `SELECT id FROM rooms WHERE user_id = $1 AND room_number = $2`, 
+                [userId, tenant.roomNo]
+            );
+            
+            if (roomRes.rows.length === 0) {
+                errors.push(`Room ${tenant.roomNo} not found.`);
+                continue;
+            }
+            
+            const roomId = roomRes.rows[0].id;
+
+            // 2. Find the First Empty Bed in that Room
+            const bedRes = await query(
+                `SELECT id FROM beds WHERE room_id = $1 AND is_occupied = 0 ORDER BY bed_index ASC LIMIT 1`, 
+                [roomId]
+            );
+
+            if (bedRes.rows.length === 0) {
+                errors.push(`Room ${tenant.roomNo} is full.`);
+                continue;
+            }
+
+            const bedId = bedRes.rows[0].id;
+
+            // 3. Book the Bed
+            await query(
+                `UPDATE beds SET is_occupied = 1, client_name = $1, client_mobile = $2, join_date = $3, last_rent_paid = NULL WHERE id = $4`,
+                [tenant.name, tenant.mobile || "", new Date().toISOString().slice(0,10), bedId]
+            );
+            successCount++;
+        }
+
+        res.json({ success: true, message: `Imported ${successCount} tenants.`, errors });
+    } catch (err) { 
+        res.status(500).json({ error: err.message }); 
+    }
+});
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+

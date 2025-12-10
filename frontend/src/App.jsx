@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { BedDouble, LogOut, Search, MessageCircle, Banknote, UserMinus, MousePointer2, Users, Calendar, ShieldCheck, Lock, RefreshCw, Loader2, Send, Trash2 } from 'lucide-react';
+import { BedDouble, LogOut, Search, MessageCircle, Banknote, UserMinus, MousePointer2, Users, Calendar, ShieldCheck, Lock, RefreshCw, Loader2, Send, Trash2, Camera, Upload } from 'lucide-react';
+import Tesseract from 'tesseract.js';
 
 // --- CONFIGURATION ---
 const API = "https://hostel-backend-0dev.onrender.com/api"; 
@@ -82,14 +83,12 @@ function AdminPanel({ user, onLogout }) {
     };
 
     const handleDeleteOwner = async (userId, username) => {
-        if(confirm(`🚨 DANGER: Are you sure you want to DELETE owner "${username}"?\n\nThis will permanently delete:\n- Their Account\n- All Rooms\n- All Tenants\n\nThis cannot be undone.`)) {
+        if(confirm(`🚨 DANGER: Delete owner "${username}"? All data will be lost.`)) {
             try {
                 await axios.post(`${API}/admin/delete-owner`, { userId });
                 alert("Owner Deleted Successfully.");
                 loadOwners();
-            } catch(e) {
-                alert("Error deleting owner.");
-            }
+            } catch(e) { alert("Error deleting owner."); }
         }
     };
 
@@ -130,7 +129,7 @@ function AdminPanel({ user, onLogout }) {
     );
 }
 
-// --- SETUP (FIXED: Added Floors 5, 6, 7) ---
+// --- SETUP ---
 function SetupPage({ user, onUpdate }) {
   const [step, setStep] = useState(1);
   const [config, setConfig] = useState({ hostelName: '', maxFloor: 3, defaultCapacity: 2 });
@@ -142,8 +141,7 @@ function SetupPage({ user, onUpdate }) {
 
   const handleGenerate = () => {
     let rooms = [];
-    const start = parseInt(range.start.slice(-2)); 
-    const end = parseInt(range.end.slice(-2));
+    const start = parseInt(range.start.slice(-2)); const end = parseInt(range.end.slice(-2));
     for (let f = 0; f <= config.maxFloor; f++) {
       for (let r = start; r <= end; r++) {
         const roomPrefix = f === 0 ? 'G' : f;
@@ -151,8 +149,7 @@ function SetupPage({ user, onUpdate }) {
         rooms.push({ floor: f, roomNo: roomNo, capacity: config.defaultCapacity });
       }
     }
-    setGeneratedRooms(rooms); 
-    setStep(2);
+    setGeneratedRooms(rooms); setStep(2);
   };
 
   const handleMouseDown = (i, e) => { e.preventDefault(); setIsDragging(true); setSelectedIndices(new Set([i])); };
@@ -168,11 +165,8 @@ function SetupPage({ user, onUpdate }) {
   };
   
   const getColor = (c) => {
-      if(c===1) return 'bg-gray-100';
-      if(c===2) return 'bg-blue-50 text-blue-700';
-      if(c===3) return 'bg-purple-50 text-purple-700';
-      if(c===4) return 'bg-orange-50 text-orange-700';
-      return 'bg-pink-50 text-pink-700';
+      if(c===1) return 'bg-gray-100'; if(c===2) return 'bg-blue-50 text-blue-700';
+      if(c===3) return 'bg-purple-50 text-purple-700'; if(c===4) return 'bg-orange-50 text-orange-700'; return 'bg-pink-50 text-pink-700';
   };
 
   return (
@@ -183,35 +177,16 @@ function SetupPage({ user, onUpdate }) {
           <div className="bg-white p-8 rounded shadow max-w-lg mx-auto mt-10">
             <label className="block font-bold mb-2">Hostel Name</label>
             <input className="w-full border p-3 mb-4 rounded" onChange={e => setConfig({...config, hostelName: e.target.value})} />
-            
             <label className="block font-bold mb-2">How many floors?</label>
-            {/* 👇 FIXED DROPDOWN LIST 👇 */}
             <select className="w-full border p-3 mb-4 rounded" onChange={e => setConfig({...config, maxFloor: parseInt(e.target.value)})}>
-                <option value={0}>Ground Floor Only</option>
-                <option value={1}>Ground + 1st Floor</option>
-                <option value={2}>Ground + 2 Floors</option>
-                <option value={3} selected>Ground + 3 Floors</option>
-                <option value={4}>Ground + 4 Floors</option>
-                <option value={5}>Ground + 5 Floors</option>
-                <option value={6}>Ground + 6 Floors</option>
-                <option value={7}>Ground + 7 Floors</option>
-                <option value={8}>Ground + 8 Floors</option>
+                {[0,1,2,3,4,5,6,7,8].map(n => <option key={n} value={n}>{n === 0 ? "Ground Only" : `Ground + ${n} Floors`}</option>)}
             </select>
-
             <label className="block font-bold mb-2 text-blue-800">Default Sharing (Auto-fill)</label>
             <select className="w-full border p-3 mb-4 rounded bg-blue-50" onChange={e => setConfig({...config, defaultCapacity: parseInt(e.target.value)})}>
-                <option value={1}>1 Bed Room</option>
-                <option value={2} selected>2 Sharing</option>
-                <option value={3}>3 Sharing</option>
-                <option value={4}>4 Sharing</option>
-                <option value={5}>5 Sharing</option>
+                {[1,2,3,4,5].map(n => <option key={n} value={n}>{n} Sharing</option>)}
             </select>
-
             <label className="block font-bold mb-2">Room Numbers (e.g., 01 to 10)</label>
-            <div className="flex gap-2 mb-6">
-                <input className="border p-3 w-1/2 rounded" placeholder="Start (e.g., 01)" onChange={e => setRange({...range, start: e.target.value})} />
-                <input className="border p-3 w-1/2 rounded" placeholder="End (e.g., 10)" onChange={e => setRange({...range, end: e.target.value})} />
-            </div>
+            <div className="flex gap-2 mb-6"><input className="border p-3 w-1/2 rounded" placeholder="Start (e.g., 01)" onChange={e => setRange({...range, start: e.target.value})} /><input className="border p-3 w-1/2 rounded" placeholder="End (e.g., 10)" onChange={e => setRange({...range, end: e.target.value})} /></div>
             <button onClick={handleGenerate} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Next: Review Rooms</button>
           </div>
         )}
@@ -221,23 +196,13 @@ function SetupPage({ user, onUpdate }) {
                  <div className="mb-2 text-sm text-gray-500 flex gap-2 items-center"><MousePointer2 size={16}/> Click & Drag to select multiple rooms</div>
                  <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
                      {generatedRooms.map((r, i) => (
-                         <div key={i} onMouseDown={(e)=>handleMouseDown(i, e)} onMouseEnter={()=>handleMouseEnter(i)} 
-                            className={`p-3 border-2 cursor-pointer flex flex-col items-center justify-center h-20 rounded transition ${selectedIndices.has(i) ? 'bg-blue-600 text-white border-blue-800' : getColor(r.capacity)}`}
-                         >
-                            <span className="font-bold">{r.roomNo}</span>
-                            <span className="text-xs">{r.capacity} Beds</span>
-                         </div>
+                         <div key={i} onMouseDown={(e)=>handleMouseDown(i, e)} onMouseEnter={()=>handleMouseEnter(i)} className={`p-3 border-2 cursor-pointer flex flex-col items-center justify-center h-20 rounded transition ${selectedIndices.has(i) ? 'bg-blue-600 text-white border-blue-800' : getColor(r.capacity)}`} > <span className="font-bold">{r.roomNo}</span> <span className="text-xs">{r.capacity} Beds</span> </div>
                      ))}
                  </div>
             </div>
             <div className="w-64 flex flex-col gap-2">
-              <div className="bg-white p-4 rounded shadow border">
-                  <h3 className="font-bold mb-2">Set Beds</h3>
-                  {[1,2,3,4,5].map(n => <button key={n} onClick={()=>applyCap(n)} className="w-full p-2 border mb-1 bg-gray-50 hover:bg-gray-100 font-bold text-gray-700">{n} Sharing</button>)}
-              </div>
-              <button disabled={loading} onClick={submitSetup} className="w-full bg-green-600 text-white py-3 rounded font-bold text-lg mt-auto flex justify-center gap-2">
-                  {loading ? <Loader2 className="animate-spin"/> : "Save & Finish"}
-              </button>
+              <div className="bg-white p-4 rounded shadow border"> <h3 className="font-bold mb-2">Set Beds</h3> {[1,2,3,4,5].map(n => <button key={n} onClick={()=>applyCap(n)} className="w-full p-2 border mb-1 bg-gray-50 hover:bg-gray-100 font-bold text-gray-700">{n} Sharing</button>)} </div>
+              <button disabled={loading} onClick={submitSetup} className="w-full bg-green-600 text-white py-3 rounded font-bold text-lg mt-auto flex justify-center gap-2"> {loading ? <Loader2 className="animate-spin"/> : "Save & Finish"} </button>
             </div>
           </div>
         )}
@@ -252,6 +217,7 @@ function Dashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('overview'); 
   const [modalData, setModalData] = useState(null); 
   const [rentFilter, setRentFilter] = useState('all');
+  const [showImport, setShowImport] = useState(false); // New Import Modal State
 
   useEffect(() => { axios.get(`${API}/dashboard/${user.id}`).then(res => setRooms(res.data)); }, []);
   
@@ -268,6 +234,7 @@ function Dashboard({ user, onLogout }) {
       <div className="bg-blue-900 text-white p-4 flex justify-between items-center shadow-md sticky top-0 z-10">
         <h1 className="text-xl font-bold tracking-wider">{user.hostel_name || 'Hostel Admin'}</h1>
         <div className="flex gap-2">
+            <button onClick={() => setShowImport(true)} className="bg-green-500 px-3 py-1 rounded text-sm font-bold flex gap-1 items-center hover:bg-green-600 border border-green-400"><Camera size={14}/> Import Data</button>
             <button onClick={handleReset} className="bg-orange-500 px-3 py-1 rounded text-sm font-bold flex gap-1 items-center hover:bg-orange-600"><RefreshCw size={14}/> Reset Layout</button>
             <button onClick={onLogout} className="bg-red-500 px-3 py-1 rounded text-sm hover:bg-red-600 flex gap-1 items-center"><LogOut size={14} /> Logout</button>
         </div>
@@ -304,8 +271,134 @@ function Dashboard({ user, onLogout }) {
       </div>
       {modalData && modalData.type === 'booking' && <BookingModal data={modalData} hostelName={user.hostel_name} close={() => { setModalData(null); window.location.reload(); }} />}
       {modalData && modalData.type === 'rent' && <RentModal data={modalData} close={() => { setModalData(null); window.location.reload(); }} />}
+      {showImport && <ImportModal user={user} close={() => setShowImport(false)} />}
     </div>
   );
+}
+
+// --- NEW IMPORT MODAL (OCR) ---
+function ImportModal({ user, close }) {
+    const [scanStatus, setScanStatus] = useState(""); // "scanning" | "done"
+    const [scannedText, setScannedText] = useState("");
+    const [parsedData, setParsedData] = useState([]); // [{roomNo, name, mobile}]
+    const [loading, setLoading] = useState(false);
+
+    const handleImageUpload = (e) => {
+        const file = e.target.files[0];
+        if(!file) return;
+        setScanStatus("scanning");
+        
+        Tesseract.recognize(
+            file,
+            'eng',
+            { logger: m => console.log(m) }
+        ).then(({ data: { text } }) => {
+            setScannedText(text);
+            setScanStatus("done");
+            parseText(text);
+        });
+    };
+
+    const parseText = (text) => {
+        // Simple logic: Try to guess Room Number and Name from each line
+        // Expected format guess: "101 Raju 99999"
+        const lines = text.split('\n');
+        const detected = [];
+        
+        lines.forEach(line => {
+            const cleanLine = line.trim();
+            if(cleanLine.length < 5) return;
+
+            // Simple Regex to look for 3 digit number (Room)
+            const roomMatch = cleanLine.match(/\b\d{3}\b/);
+            // Regex to look for Mobile (10 digits)
+            const mobileMatch = cleanLine.match(/\b\d{10}\b/);
+            
+            if(roomMatch) {
+                // assume rest of string is name
+                let name = cleanLine.replace(roomMatch[0], "").replace(mobileMatch ? mobileMatch[0] : "", "").trim();
+                name = name.replace(/[^a-zA-Z ]/g, ""); // Clean symbols
+                
+                if(name) {
+                    detected.push({ 
+                        roomNo: roomMatch[0], 
+                        name: name, 
+                        mobile: mobileMatch ? mobileMatch[0] : "" 
+                    });
+                }
+            }
+        });
+        setParsedData(detected);
+    };
+
+    const handleImport = async () => {
+        setLoading(true);
+        try {
+            const res = await axios.post(`${API}/import-data`, { userId: user.id, tenants: parsedData });
+            alert(res.data.message);
+            if(res.data.errors.length > 0) alert("Errors:\n" + res.data.errors.join("\n"));
+            window.location.reload();
+        } catch(e) {
+            alert("Import failed.");
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-4 border-b pb-2">
+                    <h2 className="text-xl font-bold flex gap-2"><Camera/> Import from Image</h2>
+                    <button onClick={close} className="font-bold text-gray-500 text-xl">✕</button>
+                </div>
+
+                <div className="mb-6 p-4 bg-blue-50 rounded border border-blue-200">
+                    <p className="text-sm text-blue-800 mb-2"><b>Instructions:</b> Take a photo of your register. Ensure good lighting.</p>
+                    <input type="file" accept="image/*" onChange={handleImageUpload} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+                </div>
+
+                {scanStatus === "scanning" && <div className="text-center py-10"><Loader2 className="animate-spin mx-auto mb-2 text-blue-600" size={40}/><p>Scanning Text...</p></div>}
+
+                {scanStatus === "done" && (
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="font-bold text-sm block mb-1">Raw Text (Edit if needed)</label>
+                            <textarea 
+                                className="w-full h-64 border p-2 text-xs font-mono bg-gray-50" 
+                                value={scannedText} 
+                                onChange={(e) => { setScannedText(e.target.value); parseText(e.target.value); }}
+                            />
+                        </div>
+                        <div>
+                            <label className="font-bold text-sm block mb-1">Detected Data ({parsedData.length})</label>
+                            <div className="h-64 overflow-y-auto border bg-gray-50 p-2 text-sm">
+                                {parsedData.length === 0 ? <p className="text-gray-400 italic">No rooms detected yet. Try editing the Raw Text.</p> : (
+                                    <table className="w-full">
+                                        <thead><tr className="text-left text-xs text-gray-500"><th>Room</th><th>Name</th><th>Mobile</th></tr></thead>
+                                        <tbody>
+                                            {parsedData.map((d, i) => (
+                                                <tr key={i} className="border-b">
+                                                    <td className="font-bold text-blue-700">{d.roomNo}</td>
+                                                    <td>{d.name}</td>
+                                                    <td className="text-xs text-gray-500">{d.mobile || "-"}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {parsedData.length > 0 && (
+                    <button disabled={loading} onClick={handleImport} className="w-full bg-green-600 text-white py-3 rounded font-bold mt-4 flex justify-center gap-2 hover:bg-green-700">
+                        {loading ? <Loader2 className="animate-spin"/> : `Import ${parsedData.length} Tenants`}
+                    </button>
+                )}
+            </div>
+        </div>
+    );
 }
 
 // --- MODALS ---
