@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { BedDouble, LogOut, Search, MessageCircle, Banknote, UserMinus, MousePointer2, Users, Calendar, ShieldCheck, Lock, RefreshCw, Loader2, Send, Trash2, Camera, Upload, Plus, Minus } from 'lucide-react';
+import { BedDouble, LogOut, Search, MessageCircle, Banknote, UserMinus, MousePointer2, Users, Calendar, ShieldCheck, Lock, RefreshCw, Loader2, Send, Trash2, Camera, Upload, Plus, Minus, Home, LayoutGrid } from 'lucide-react';
 import Tesseract from 'tesseract.js';
 
 // --- CONFIGURATION ---
@@ -27,7 +27,7 @@ export default function App() {
   return <Dashboard user={user} onLogout={handleLogout} />;
 }
 
-// --- LOGIN ---
+// --- LOGIN (Redesigned) ---
 function LoginPage({ onLogin }) {
   const [creds, setCreds] = useState({ username: '', password: '' });
   const [msg, setMsg] = useState({ text: '', type: '' });
@@ -42,11 +42,11 @@ function LoginPage({ onLogin }) {
       onLogin(res.data);
     } catch (err) {
       if (err.response && err.response.data.error === "REGISTRATION_SUCCESS") {
-        setMsg({ text: "Account created! Please ask Admin to approve you.", type: 'success' });
+        setMsg({ text: "Account created! Waiting for Admin approval.", type: 'success' });
       } else if (err.response && err.response.data.error === "NOT_APPROVED") {
-        setMsg({ text: "Account pending approval. Please contact Admin.", type: 'error' });
+        setMsg({ text: "Account pending approval.", type: 'error' });
       } else {
-        setMsg({ text: "Login failed.", type: 'error' });
+        setMsg({ text: "Invalid credentials.", type: 'error' });
       }
     } finally {
         setLoading(false);
@@ -54,21 +54,41 @@ function LoginPage({ onLogin }) {
   };
 
   return (
-    <div className="flex items-center justify-center h-screen bg-gray-100">
-      <form onSubmit={handleSubmit} className="p-8 bg-white rounded shadow-md w-96 border-t-4 border-blue-600">
-        <h2 className="text-2xl font-bold mb-4 text-blue-800">Hostel Login</h2>
-        {msg.text && <div className={`p-3 rounded mb-4 text-sm ${msg.type === 'success' ? 'bg-green-100' : 'bg-red-100'}`}>{msg.text}</div>}
-        <input className="w-full p-2 border mb-2 rounded" placeholder="Username" onChange={e => setCreds({...creds, username: e.target.value})} />
-        <input className="w-full p-2 border mb-4 rounded" type="password" placeholder="Password" onChange={e => setCreds({...creds, password: e.target.value})} />
-        <button disabled={loading} className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 font-bold flex justify-center gap-2">
-            {loading ? <Loader2 className="animate-spin"/> : "Login / Register"}
-        </button>
-      </form>
+    <div className="flex items-center justify-center h-screen bg-gradient-to-br from-slate-100 to-blue-100">
+      <div className="bg-white p-10 rounded-2xl shadow-xl w-96 border border-white/50 backdrop-blur-sm">
+        <div className="flex justify-center mb-6">
+            <div className="bg-blue-600 p-3 rounded-full text-white shadow-lg">
+                <Home size={32} />
+            </div>
+        </div>
+        <h2 className="text-3xl font-bold mb-2 text-slate-800 text-center">Welcome Back</h2>
+        <p className="text-slate-500 text-center mb-8">Manage your hostel with ease</p>
+        
+        {msg.text && (
+            <div className={`p-3 rounded-lg mb-6 text-sm font-medium text-center ${msg.type === 'success' ? 'bg-green-50 text-green-600 border border-green-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>
+                {msg.text}
+            </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Username</label>
+                <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" placeholder="Enter username" onChange={e => setCreds({...creds, username: e.target.value})} />
+            </div>
+            <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Password</label>
+                <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" type="password" placeholder="••••••••" onChange={e => setCreds({...creds, password: e.target.value})} />
+            </div>
+            <button disabled={loading} className="w-full bg-blue-600 text-white p-3 rounded-xl font-bold shadow-lg hover:bg-blue-700 hover:shadow-blue-200 active:scale-95 transition-all flex justify-center gap-2 mt-4">
+                {loading ? <Loader2 className="animate-spin"/> : "Sign In"}
+            </button>
+        </form>
+      </div>
     </div>
   );
 }
 
-// --- ADMIN ---
+// --- ADMIN (Redesigned) ---
 function AdminPanel({ user, onLogout }) {
     const [owners, setOwners] = useState([]);
     const [newPass, setNewPass] = useState("");
@@ -83,10 +103,9 @@ function AdminPanel({ user, onLogout }) {
     };
 
     const handleDeleteOwner = async (userId, username) => {
-        if(confirm(`🚨 DANGER: Delete owner "${username}"? All data will be lost.`)) {
+        if(confirm(`🚨 DELETE OWNER "${username}"?\n\nThis will permanently delete ALL data.`)) {
             try {
                 await axios.post(`${API}/admin/delete-owner`, { userId });
-                alert("Owner Deleted Successfully.");
                 loadOwners();
             } catch(e) { alert("Error deleting owner."); }
         }
@@ -99,37 +118,79 @@ function AdminPanel({ user, onLogout }) {
             alert("Updated! Log in again."); onLogout();
         }
     };
+
     return (
-        <div className="min-h-screen bg-gray-100">
-            <div className="bg-gray-800 text-white p-4 flex justify-between"> <h1 className="text-xl font-bold flex gap-2"><ShieldCheck /> Super Admin</h1> <button onClick={onLogout} className="bg-red-500 px-3 py-1 rounded text-sm">Logout</button> </div>
-            <div className="p-8 max-w-4xl mx-auto">
-                <div className="bg-white p-6 rounded shadow mb-8 border-l-4 border-red-500">
-                    <h3 className="font-bold mb-4 flex gap-2"><Lock size={18}/> Security</h3>
-                    <div className="flex gap-4"> <input type="text" className="w-full border p-2 rounded" placeholder="New Password" value={newPass} onChange={(e) => setNewPass(e.target.value)} /> <button onClick={handleChangePassword} className="bg-red-600 text-white px-6 rounded font-bold">Update</button> </div>
+        <div className="min-h-screen bg-slate-50 font-sans">
+            <nav className="bg-slate-900 text-white p-4 shadow-lg sticky top-0 z-20">
+                <div className="max-w-6xl mx-auto flex justify-between items-center">
+                    <h1 className="text-lg font-bold flex items-center gap-3"><ShieldCheck className="text-blue-400"/> Super Admin Console</h1>
+                    <button onClick={onLogout} className="bg-slate-700 hover:bg-red-600 px-4 py-2 rounded-lg text-sm transition-colors flex items-center gap-2">
+                        <LogOut size={16}/> Logout
+                    </button>
                 </div>
-                <h2 className="text-2xl font-bold mb-6">Hostel Owners</h2>
-                <div className="bg-white rounded shadow">
-                    <table className="w-full">
-                        <thead className="bg-gray-200"><tr><th className="p-4">Username</th><th className="p-4">Hostel</th><th className="p-4">Status</th><th className="p-4">Action</th><th className="p-4">Delete</th></tr></thead>
-                        <tbody>
-                            {owners.map(owner => (
-                                <tr key={owner.id} className="border-b text-center">
-                                    <td className="p-4 font-bold">{owner.username}</td>
-                                    <td className="p-4">{owner.hostel_name || 'Not Setup'}</td>
-                                    <td className="p-4">{owner.is_approved === 1 ? 'Active' : 'Pending'}</td>
-                                    <td className="p-4"><button onClick={() => toggleStatus(owner.id, owner.is_approved)} className={`px-4 py-2 rounded text-white font-bold text-sm ${owner.is_approved === 1 ? 'bg-orange-500' : 'bg-green-600'}`}>{owner.is_approved === 1 ? 'Block' : 'Approve'}</button></td>
-                                    <td className="p-4"><button onClick={() => handleDeleteOwner(owner.id, owner.username)} className="bg-red-600 text-white p-2 rounded hover:bg-red-800" title="Delete Owner"><Trash2 size={16}/></button></td>
+            </nav>
+
+            <div className="p-8 max-w-6xl mx-auto space-y-8">
+                {/* Security Card */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row items-center gap-6">
+                    <div className="bg-orange-100 p-3 rounded-full text-orange-600"><Lock size={24}/></div>
+                    <div className="flex-1 w-full">
+                        <h3 className="font-bold text-slate-800">Security Settings</h3>
+                        <p className="text-sm text-slate-500 mb-3">Update the master password for the admin account.</p>
+                        <div className="flex gap-3"> 
+                            <input type="text" className="flex-1 border border-slate-200 p-2 rounded-lg bg-slate-50 focus:ring-2 focus:ring-orange-200 outline-none" placeholder="New Strong Password" value={newPass} onChange={(e) => setNewPass(e.target.value)} /> 
+                            <button onClick={handleChangePassword} className="bg-slate-900 text-white px-6 rounded-lg font-bold hover:bg-black transition-colors">Update</button> 
+                        </div>
+                    </div>
+                </div>
+
+                {/* Owners Table */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div className="p-6 border-b border-slate-100">
+                        <h2 className="text-xl font-bold text-slate-800">Registered Owners</h2>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-bold tracking-wider">
+                                <tr>
+                                    <th className="p-4 text-left">Owner Info</th>
+                                    <th className="p-4 text-left">Hostel Name</th>
+                                    <th className="p-4 text-center">Status</th>
+                                    <th className="p-4 text-center">Actions</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {owners.map(owner => (
+                                    <tr key={owner.id} className="hover:bg-slate-50 transition-colors">
+                                        <td className="p-4">
+                                            <div className="font-bold text-slate-800">{owner.username}</div>
+                                            <div className="text-xs text-slate-400">ID: #{owner.id}</div>
+                                        </td>
+                                        <td className="p-4 text-slate-600">{owner.hostel_name || <span className="italic text-slate-400">Not Setup</span>}</td>
+                                        <td className="p-4 text-center">
+                                            {owner.is_approved === 1 
+                                                ? <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold shadow-sm">Active</span>
+                                                : <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-bold shadow-sm">Pending</span>
+                                            }
+                                        </td>
+                                        <td className="p-4 flex justify-center gap-2">
+                                            <button onClick={() => toggleStatus(owner.id, owner.is_approved)} className={`px-4 py-2 rounded-lg text-white font-bold text-xs shadow-sm transition-transform active:scale-95 ${owner.is_approved === 1 ? 'bg-slate-400 hover:bg-slate-500' : 'bg-green-600 hover:bg-green-700'}`}>
+                                                {owner.is_approved === 1 ? 'Block Access' : 'Approve Access'}
+                                            </button>
+                                            <button onClick={() => handleDeleteOwner(owner.id, owner.username)} className="bg-red-50 text-red-600 border border-red-100 p-2 rounded-lg hover:bg-red-100 transition-colors" title="Delete Owner"><Trash2 size={16}/></button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
     );
 }
 
-// --- SETUP ---
+// --- SETUP (Redesigned) ---
 function SetupPage({ user, onUpdate }) {
   const [step, setStep] = useState(1);
   const [config, setConfig] = useState({ hostelName: '', maxFloor: 3, defaultCapacity: 2 });
@@ -165,44 +226,89 @@ function SetupPage({ user, onUpdate }) {
   };
   
   const getColor = (c) => {
-      if(c===1) return 'bg-gray-100'; if(c===2) return 'bg-blue-50 text-blue-700';
-      if(c===3) return 'bg-purple-50 text-purple-700'; if(c===4) return 'bg-orange-50 text-orange-700'; return 'bg-pink-50 text-pink-700';
+      if(c===1) return 'bg-slate-100 border-slate-200 text-slate-500'; 
+      if(c===2) return 'bg-blue-50 border-blue-200 text-blue-600';
+      if(c===3) return 'bg-purple-50 border-purple-200 text-purple-600'; 
+      if(c===4) return 'bg-orange-50 border-orange-200 text-orange-600'; 
+      return 'bg-pink-50 border-pink-200 text-pink-600';
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col" onMouseUp={() => setIsDragging(false)}>
-      <div className="bg-white shadow p-4 mb-6 text-center text-2xl font-bold">Setup Hostel</div>
-      <div className="flex-1 max-w-6xl w-full mx-auto p-4">
+    <div className="min-h-screen bg-slate-50 flex flex-col" onMouseUp={() => setIsDragging(false)}>
+      <div className="bg-white/80 backdrop-blur-md shadow-sm p-4 sticky top-0 z-10 border-b border-slate-200">
+          <div className="max-w-6xl mx-auto text-center font-bold text-slate-800 text-lg">Initial Setup</div>
+      </div>
+      
+      <div className="flex-1 max-w-4xl w-full mx-auto p-6">
         {step === 1 && (
-          <div className="bg-white p-8 rounded shadow max-w-lg mx-auto mt-10">
-            <label className="block font-bold mb-2">Hostel Name</label>
-            <input className="w-full border p-3 mb-4 rounded" onChange={e => setConfig({...config, hostelName: e.target.value})} />
-            <label className="block font-bold mb-2">How many floors?</label>
-            <select className="w-full border p-3 mb-4 rounded" onChange={e => setConfig({...config, maxFloor: parseInt(e.target.value)})}>
-                {[0,1,2,3,4,5,6,7,8].map(n => <option key={n} value={n}>{n === 0 ? "Ground Only" : `Ground + ${n} Floors`}</option>)}
-            </select>
-            <label className="block font-bold mb-2 text-blue-800">Default Sharing (Auto-fill)</label>
-            <select className="w-full border p-3 mb-4 rounded bg-blue-50" onChange={e => setConfig({...config, defaultCapacity: parseInt(e.target.value)})}>
-                {[1,2,3,4,5].map(n => <option key={n} value={n}>{n} Sharing</option>)}
-            </select>
-            <label className="block font-bold mb-2">Room Numbers (e.g., 01 to 10)</label>
-            <div className="flex gap-2 mb-6"><input className="border p-3 w-1/2 rounded" placeholder="Start (e.g., 01)" onChange={e => setRange({...range, start: e.target.value})} /><input className="border p-3 w-1/2 rounded" placeholder="End (e.g., 10)" onChange={e => setRange({...range, end: e.target.value})} /></div>
-            <button onClick={handleGenerate} className="w-full bg-blue-600 text-white p-3 rounded font-bold">Next: Review Rooms</button>
+          <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
+            <h2 className="text-2xl font-bold mb-6 text-slate-800">Hostel Details</h2>
+            
+            <div className="grid gap-6">
+                <div>
+                    <label className="block text-sm font-bold text-slate-500 mb-2">Hostel Name</label>
+                    <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" onChange={e => setConfig({...config, hostelName: e.target.value})} placeholder="e.g. Sunshine Residency" />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-bold text-slate-500 mb-2">Total Floors</label>
+                        <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" onChange={e => setConfig({...config, maxFloor: parseInt(e.target.value)})}>
+                            {[0,1,2,3,4,5,6,7,8].map(n => <option key={n} value={n}>{n === 0 ? "Ground Only" : `G + ${n}`}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold text-blue-600 mb-2">Default Sharing</label>
+                        <select className="w-full p-3 bg-blue-50 border border-blue-200 rounded-xl outline-none text-blue-700 font-medium" onChange={e => setConfig({...config, defaultCapacity: parseInt(e.target.value)})}>
+                            {[1,2,3,4,5].map(n => <option key={n} value={n}>{n} Sharing</option>)}
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-bold text-slate-500 mb-2">Room Range (per floor)</label>
+                    <div className="flex gap-4 items-center">
+                        <input className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-center" placeholder="01" onChange={e => setRange({...range, start: e.target.value})} />
+                        <span className="text-slate-400 font-bold">TO</span>
+                        <input className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-center" placeholder="10" onChange={e => setRange({...range, end: e.target.value})} />
+                    </div>
+                </div>
+            </div>
+            
+            <button onClick={handleGenerate} className="w-full mt-8 bg-blue-600 text-white p-4 rounded-xl font-bold shadow-lg hover:bg-blue-700 transition-all">Next Step &rarr;</button>
           </div>
         )}
+
         {step === 2 && (
-          <div className="flex gap-6 h-[calc(100vh-150px)]">
-            <div className="flex-1 overflow-y-auto bg-white p-6 rounded shadow border select-none">
-                 <div className="mb-2 text-sm text-gray-500 flex gap-2 items-center"><MousePointer2 size={16}/> Click & Drag to select multiple rooms</div>
-                 <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+          <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-150px)]">
+            <div className="flex-1 overflow-y-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-100 select-none custom-scrollbar">
+                 <div className="mb-4 text-xs font-bold uppercase text-slate-400 flex gap-2 items-center"><MousePointer2 size={14}/> Click & Drag to select rooms</div>
+                 <div className="grid grid-cols-4 md:grid-cols-5 gap-3">
                      {generatedRooms.map((r, i) => (
-                         <div key={i} onMouseDown={(e)=>handleMouseDown(i, e)} onMouseEnter={()=>handleMouseEnter(i)} className={`p-3 border-2 cursor-pointer flex flex-col items-center justify-center h-20 rounded transition ${selectedIndices.has(i) ? 'bg-blue-600 text-white border-blue-800' : getColor(r.capacity)}`} > <span className="font-bold">{r.roomNo}</span> <span className="text-xs">{r.capacity} Beds</span> </div>
+                         <div key={i} onMouseDown={(e)=>handleMouseDown(i, e)} onMouseEnter={()=>handleMouseEnter(i)} 
+                            className={`p-2 border-2 cursor-pointer flex flex-col items-center justify-center h-20 rounded-xl transition-all duration-100
+                                ${selectedIndices.has(i) ? 'bg-blue-600 text-white border-blue-600 shadow-md scale-105' : getColor(r.capacity)}`}
+                         >
+                            <span className="font-bold text-lg">{r.roomNo}</span>
+                            <span className="text-[10px] opacity-80">{r.capacity} Beds</span>
+                         </div>
                      ))}
                  </div>
             </div>
-            <div className="w-64 flex flex-col gap-2">
-              <div className="bg-white p-4 rounded shadow border"> <h3 className="font-bold mb-2">Set Beds</h3> {[1,2,3,4,5].map(n => <button key={n} onClick={()=>applyCap(n)} className="w-full p-2 border mb-1 bg-gray-50 hover:bg-gray-100 font-bold text-gray-700">{n} Sharing</button>)} </div>
-              <button disabled={loading} onClick={submitSetup} className="w-full bg-green-600 text-white py-3 rounded font-bold text-lg mt-auto flex justify-center gap-2"> {loading ? <Loader2 className="animate-spin"/> : "Save & Finish"} </button>
+            <div className="w-full md:w-64 flex flex-col gap-4">
+              <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100"> 
+                  <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><LayoutGrid size={18}/> Set Capacity</h3> 
+                  <div className="space-y-2">
+                    {[1,2,3,4,5].map(n => (
+                        <button key={n} onClick={()=>applyCap(n)} className="w-full py-2 px-4 rounded-lg text-sm font-bold transition-all bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200">
+                            {n} Sharing
+                        </button>
+                    ))}
+                  </div>
+              </div>
+              <button disabled={loading} onClick={submitSetup} className="w-full bg-green-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:bg-green-700 transition-all flex justify-center gap-2 mt-auto"> 
+                {loading ? <Loader2 className="animate-spin"/> : "Finish Setup"} 
+              </button>
             </div>
           </div>
         )}
@@ -211,7 +317,7 @@ function SetupPage({ user, onUpdate }) {
   );
 }
 
-// --- DASHBOARD ---
+// --- DASHBOARD (Redesigned) ---
 function Dashboard({ user, onLogout }) {
   const [rooms, setRooms] = useState([]);
   const [activeTab, setActiveTab] = useState('overview'); 
@@ -223,71 +329,107 @@ function Dashboard({ user, onLogout }) {
   const fetchDashboard = () => { axios.get(`${API}/dashboard/${user.id}`).then(res => setRooms(res.data)); };
   
   const handleReset = async () => {
-      if(confirm("⚠ DELETE ALL DATA? Use this to fix layout mistakes.")) {
+      if(confirm("⚠ WARNING: This will WIPE all data. Continue?")) {
           await axios.post(`${API}/reset-hostel`, { userId: user.id });
           localStorage.setItem('hostelUser', JSON.stringify({ ...user, setup_complete: 0 }));
           window.location.reload();
       }
   };
 
-  const handleAddBed = async (roomId) => {
-      try { await axios.post(`${API}/rooms/add-bed`, { roomId }); fetchDashboard(); } 
-      catch(e) { alert("Error adding bed"); }
-  };
-
-  const handleRemoveBed = async (roomId) => {
-      try { await axios.post(`${API}/rooms/remove-bed`, { roomId }); fetchDashboard(); } 
-      catch(e) { alert(e.response.data.error || "Error removing bed"); }
-  };
+  const handleAddBed = async (roomId) => { try { await axios.post(`${API}/rooms/add-bed`, { roomId }); fetchDashboard(); } catch(e) { alert("Error adding bed"); } };
+  const handleRemoveBed = async (roomId) => { try { await axios.post(`${API}/rooms/remove-bed`, { roomId }); fetchDashboard(); } catch(e) { alert(e.response.data.error || "Error"); } };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
-      <div className="bg-blue-900 text-white p-4 flex justify-between items-center shadow-md sticky top-0 z-10">
-        <h1 className="text-xl font-bold tracking-wider">{user.hostel_name || 'Hostel Admin'}</h1>
-        <div className="flex gap-2">
-            <button onClick={() => setShowImport(true)} className="bg-green-500 px-3 py-1 rounded text-sm font-bold flex gap-1 items-center hover:bg-green-600 border border-green-400"><Camera size={14}/> Import Data</button>
-            <button onClick={handleReset} className="bg-orange-500 px-3 py-1 rounded text-sm font-bold flex gap-1 items-center hover:bg-orange-600"><RefreshCw size={14}/> Reset Layout</button>
-            <button onClick={onLogout} className="bg-red-500 px-3 py-1 rounded text-sm hover:bg-red-600 flex gap-1 items-center"><LogOut size={14} /> Logout</button>
-        </div>
-      </div>
-      <div className="bg-white shadow p-2 flex justify-center gap-4"> <button onClick={() => setActiveTab('overview')} className={`px-6 py-2 rounded-full font-bold ${activeTab === 'overview' ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>Overview</button> <button onClick={() => setActiveTab('rent')} className={`px-6 py-2 rounded-full font-bold ${activeTab === 'rent' ? 'bg-green-600 text-white' : 'text-gray-500'}`}>Rent Collection</button> </div>
-
-      <div className="p-6 max-w-7xl mx-auto w-full">
-        {Object.entries(groupBy(rooms, 'floor')).map(([floor, floorRooms]) => (
-            <div key={floor} className="mb-8">
-                <h2 className="text-lg font-bold text-gray-500 mb-3 border-b-2">{parseInt(floor) === 0 ? "GROUND FLOOR" : `FLOOR ${floor}`}</h2>
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                    {floorRooms.map(room => (
-                        <div key={room.id} className="bg-white p-3 rounded-lg shadow border-t-4 border-blue-500 relative">
-                            <div className="font-bold text-center mb-2">{room.number}</div>
-                            <div className="flex justify-center gap-2 flex-wrap mb-2">
-                                {room.beds.map((bed, i) => {
-                                    if(activeTab === 'rent' && !bed.isOccupied) return null; 
-                                    const isPaid = bed.lastRentPaid === getCurrentMonth();
-                                    if(activeTab === 'rent' && rentFilter === 'paid' && !isPaid) return null;
-                                    if(activeTab === 'rent' && rentFilter === 'unpaid' && isPaid) return null;
-                                    
-                                    let color = 'bg-green-500';
-                                    if(activeTab === 'rent') color = isPaid ? 'bg-green-600' : 'bg-red-600';
-                                    else if(bed.isOccupied) color = bed.leaveDate ? 'bg-orange-500' : 'bg-red-500';
-                                    
-                                    return <div key={i} onClick={() => setModalData({ type: activeTab==='rent'?'rent':'booking', room, bed })} className={`w-8 h-8 rounded-full cursor-pointer flex items-center justify-center text-white text-xs font-bold shadow-sm ${color}`}>{i + 1}</div>;
-                                })}
-                            </div>
-                            
-                            {/* +/- BUTTONS */}
-                            {activeTab === 'overview' && (
-                                <div className="flex justify-center gap-2 border-t pt-2 mt-2">
-                                    <button onClick={() => handleAddBed(room.id)} className="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200" title="Add Bed"><Plus size={14}/></button>
-                                    <button onClick={() => handleRemoveBed(room.id)} className="p-1 bg-red-100 text-red-600 rounded hover:bg-red-200" title="Remove Last Bed"><Minus size={14}/></button>
-                                </div>
-                            )}
-                        </div>
-                    ))}
-                </div>
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+      {/* Modern Floating Navbar */}
+      <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-slate-200 px-4 py-3 shadow-sm">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white"><Home size={18}/></div>
+                {user.hostel_name || 'My Hostel'}
+            </h1>
+            
+            <div className="flex gap-2 w-full md:w-auto">
+                <button onClick={() => setShowImport(true)} className="flex-1 md:flex-none bg-emerald-50 text-emerald-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-100 border border-emerald-200 transition-colors flex items-center justify-center gap-2">
+                    <Camera size={16}/> Import
+                </button>
+                <button onClick={handleReset} className="bg-orange-50 text-orange-600 px-3 py-2 rounded-lg text-sm font-bold hover:bg-orange-100 border border-orange-200 transition-colors" title="Reset Layout">
+                    <RefreshCw size={16}/>
+                </button>
+                <button onClick={onLogout} className="bg-red-50 text-red-600 px-3 py-2 rounded-lg text-sm font-bold hover:bg-red-100 border border-red-200 transition-colors" title="Logout">
+                    <LogOut size={16}/>
+                </button>
             </div>
-        ))}
+          </div>
       </div>
+
+      {/* Tabs & Filters */}
+      <div className="max-w-7xl mx-auto w-full px-4 py-6">
+          <div className="flex justify-center mb-8">
+              <div className="bg-white p-1 rounded-xl shadow-sm border border-slate-200 inline-flex">
+                  <button onClick={() => setActiveTab('overview')} className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'overview' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>Overview</button>
+                  <button onClick={() => setActiveTab('rent')} className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'rent' ? 'bg-green-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>Rent Collection</button>
+              </div>
+          </div>
+
+          {activeTab === 'rent' && (
+              <div className="flex justify-end mb-4">
+                  <select className="bg-white border border-slate-200 text-slate-600 text-sm rounded-lg p-2 font-medium focus:ring-2 focus:ring-green-500 outline-none" onChange={(e) => setRentFilter(e.target.value)}>
+                      <option value="all">Show All Tenants</option>
+                      <option value="paid">Paid This Month</option>
+                      <option value="unpaid">Unpaid / Due</option>
+                  </select>
+              </div>
+          )}
+
+          {/* Grid Layout */}
+          <div className="space-y-10">
+            {Object.entries(groupBy(rooms, 'floor')).map(([floor, floorRooms]) => (
+                <div key={floor}>
+                    <div className="flex items-center gap-4 mb-4">
+                        <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">{parseInt(floor) === 0 ? "Ground Floor" : `Floor ${floor}`}</h2>
+                        <div className="h-px bg-slate-200 flex-1"></div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                        {floorRooms.map(room => (
+                            <div key={room.id} className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition-shadow relative group">
+                                <div className="text-center font-bold text-slate-700 text-lg mb-3">{room.number}</div>
+                                
+                                <div className="flex justify-center flex-wrap gap-2 mb-2">
+                                    {room.beds.map((bed, i) => {
+                                        if(activeTab === 'rent' && !bed.isOccupied) return null; 
+                                        const isPaid = bed.lastRentPaid === getCurrentMonth();
+                                        if(activeTab === 'rent' && rentFilter === 'paid' && !isPaid) return null;
+                                        if(activeTab === 'rent' && rentFilter === 'unpaid' && isPaid) return null;
+                                        
+                                        let bgClass = 'bg-slate-100 text-slate-400 border-slate-200 hover:bg-green-100 hover:text-green-600 hover:border-green-300';
+                                        if(activeTab === 'rent') bgClass = isPaid ? 'bg-green-100 text-green-700 border-green-200' : 'bg-red-100 text-red-700 border-red-200 animate-pulse';
+                                        else if(bed.isOccupied) bgClass = bed.leaveDate ? 'bg-orange-100 text-orange-700 border-orange-200' : 'bg-blue-100 text-blue-700 border-blue-200';
+                                        
+                                        return (
+                                            <div key={i} onClick={() => setModalData({ type: activeTab==='rent'?'rent':'booking', room, bed })} 
+                                                className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold border cursor-pointer transition-all ${bgClass}`}
+                                            >
+                                                {i + 1}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                
+                                {activeTab === 'overview' && (
+                                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1">
+                                        <button onClick={() => handleAddBed(room.id)} className="w-5 h-5 bg-blue-50 text-blue-600 rounded flex items-center justify-center hover:bg-blue-100" title="Add Bed"><Plus size={10}/></button>
+                                        <button onClick={() => handleRemoveBed(room.id)} className="w-5 h-5 bg-red-50 text-red-600 rounded flex items-center justify-center hover:bg-red-100" title="Remove Bed"><Minus size={10}/></button>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ))}
+          </div>
+      </div>
+
       {modalData && modalData.type === 'booking' && <BookingModal data={modalData} hostelName={user.hostel_name} close={() => { setModalData(null); fetchDashboard(); }} />}
       {modalData && modalData.type === 'rent' && <RentModal data={modalData} close={() => { setModalData(null); fetchDashboard(); }} />}
       {showImport && <ImportModal user={user} close={() => setShowImport(false)} />}
@@ -295,7 +437,7 @@ function Dashboard({ user, onLogout }) {
   );
 }
 
-// --- NEW IMPORT MODAL (PARSING DATE) ---
+// --- IMPORT MODAL (Redesigned) ---
 function ImportModal({ user, close }) {
     const [scanStatus, setScanStatus] = useState(""); 
     const [scannedText, setScannedText] = useState("");
@@ -317,7 +459,6 @@ function ImportModal({ user, close }) {
     const parseText = (text) => {
         const lines = text.split('\n');
         const detected = [];
-        // Regex to look for date (DD-MM-YYYY or similar)
         const dateRegex = /\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b/;
 
         lines.forEach(line => {
@@ -333,19 +474,13 @@ function ImportModal({ user, close }) {
                 
                 let isoDate = null;
                 if(dateMatch) {
-                    // Convert typical indian format DD-MM-YYYY to ISO YYYY-MM-DD
                     try {
                         const parts = dateMatch[0].split(/[./-]/);
-                        if(parts.length === 3) isoDate = `${parts[2].length===2?'20'+parts[2]:parts[2]}-${parts[1]}-${parts[0]}`; // YYYY-MM-DD
+                        if(parts.length === 3) isoDate = `${parts[2].length===2?'20'+parts[2]:parts[2]}-${parts[1]}-${parts[0]}`; 
                     } catch(e){}
                 }
 
-                if(name) detected.push({ 
-                    roomNo: roomMatch[0], 
-                    name: name, 
-                    mobile: mobileMatch ? mobileMatch[0] : "",
-                    joinDate: isoDate // Send this to backend
-                });
+                if(name) detected.push({ roomNo: roomMatch[0], name: name, mobile: mobileMatch ? mobileMatch[0] : "", joinDate: isoDate });
             }
         });
         setParsedData(detected);
@@ -362,36 +497,72 @@ function ImportModal({ user, close }) {
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-                <div className="flex justify-between items-center mb-4 border-b pb-2"> <h2 className="text-xl font-bold flex gap-2"><Camera/> Import from Image</h2> <button onClick={close} className="font-bold text-gray-500 text-xl">✕</button> </div>
-                <div className="mb-6 p-4 bg-blue-50 rounded border border-blue-200"> <p className="text-sm text-blue-800 mb-2"><b>Instructions:</b> Take a photo of your register.</p> <input type="file" accept="image/*" onChange={handleImageUpload} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/> </div>
-                {scanStatus === "scanning" && <div className="text-center py-10"><Loader2 className="animate-spin mx-auto mb-2 text-blue-600" size={40}/><p>Scanning Text...</p></div>}
-                {scanStatus === "done" && (
-                    <div className="grid grid-cols-2 gap-4">
-                        <div> <label className="font-bold text-sm block mb-1">Raw Text</label> <textarea className="w-full h-64 border p-2 text-xs font-mono bg-gray-50" value={scannedText} onChange={(e) => { setScannedText(e.target.value); parseText(e.target.value); }} /> </div>
-                        <div>
-                            <label className="font-bold text-sm block mb-1">Detected Data ({parsedData.length})</label>
-                            <div className="h-64 overflow-y-auto border bg-gray-50 p-2 text-sm">
-                                {parsedData.length === 0 ? <p className="text-gray-400 italic">No rooms detected.</p> : (
-                                    <table className="w-full">
-                                        <thead><tr className="text-left text-xs text-gray-500"><th>Room</th><th>Name</th><th>Date</th></tr></thead>
-                                        <tbody>
-                                            {parsedData.map((d, i) => ( <tr key={i} className="border-b"> <td className="font-bold text-blue-700">{d.roomNo}</td> <td>{d.name}</td> <td className="text-xs text-gray-500">{d.joinDate || "Today"}</td> </tr> ))}
-                                        </tbody>
-                                    </table>
-                                )}
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
+                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Camera className="text-blue-600"/> Smart Import</h2>
+                    <button onClick={close} className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center hover:bg-slate-300">✕</button>
+                </div>
+                
+                <div className="p-6 overflow-y-auto">
+                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 text-center border-dashed border-2">
+                        <Camera size={40} className="mx-auto text-blue-300 mb-3"/>
+                        <p className="text-sm text-blue-800 font-bold mb-1">Take a photo of your handwritten register</p>
+                        <p className="text-xs text-blue-500 mb-4">Ensure good lighting. We will auto-detect Room No, Name & Mobile.</p>
+                        <input type="file" accept="image/*" onChange={handleImageUpload} className="mx-auto block text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-blue-600 file:text-white hover:file:bg-blue-700"/>
+                    </div>
+
+                    {scanStatus === "scanning" && (
+                        <div className="py-12 text-center">
+                            <Loader2 className="animate-spin mx-auto text-blue-600 mb-4" size={40}/>
+                            <p className="text-slate-500 font-medium">Scanning text using AI...</p>
+                        </div>
+                    )}
+
+                    {scanStatus === "done" && (
+                        <div className="mt-6 grid md:grid-cols-2 gap-6">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Detected Data ({parsedData.length} records)</label>
+                                <div className="border border-slate-200 rounded-xl overflow-hidden h-64 overflow-y-auto bg-slate-50">
+                                    {parsedData.length === 0 ? <div className="p-10 text-center text-slate-400 text-sm">No valid data found. Try editing the raw text.</div> : (
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-white text-xs text-slate-400 uppercase">
+                                                <tr><th className="p-2">Room</th><th className="p-2">Name</th><th className="p-2">Date</th></tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {parsedData.map((d, i) => (
+                                                    <tr key={i} className="bg-white">
+                                                        <td className="p-2 font-bold text-blue-600">{d.roomNo}</td>
+                                                        <td className="p-2">{d.name}</td>
+                                                        <td className="p-2 text-xs text-slate-400">{d.joinDate || "Now"}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    )}
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Raw Text (Editable)</label>
+                                <textarea className="w-full h-64 p-3 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-100 outline-none resize-none font-mono text-slate-600" value={scannedText} onChange={(e) => { setScannedText(e.target.value); parseText(e.target.value); }} />
                             </div>
                         </div>
+                    )}
+                </div>
+
+                {parsedData.length > 0 && (
+                    <div className="p-4 border-t border-slate-100 bg-slate-50">
+                        <button disabled={loading} onClick={handleImport} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold text-lg shadow-lg shadow-emerald-100 transition-all flex justify-center gap-2">
+                            {loading ? <Loader2 className="animate-spin"/> : `Import ${parsedData.length} Tenants to Database`}
+                        </button>
                     </div>
                 )}
-                {parsedData.length > 0 && <button disabled={loading} onClick={handleImport} className="w-full bg-green-600 text-white py-3 rounded font-bold mt-4 flex justify-center gap-2 hover:bg-green-700"> {loading ? <Loader2 className="animate-spin"/> : `Import ${parsedData.length} Tenants`} </button>}
             </div>
         </div>
     );
 }
 
-// --- MODALS ---
+// --- BOOKING MODAL (Redesigned) ---
 function BookingModal({ data, close, hostelName }) {
   const { bed, room } = data;
   const [formData, setFormData] = useState({ clientName: '', clientMobile: '', joinDate: '', leaveDate: '', advance: '', maintenance: '' });
@@ -401,8 +572,7 @@ function BookingModal({ data, close, hostelName }) {
   const refundableCalc = (parseFloat(formData.advance) || 0) - (parseFloat(formData.maintenance) || 0);
 
   const handleSubmit = async (e) => { 
-      e.preventDefault(); 
-      setLoading(true);
+      e.preventDefault(); setLoading(true);
       try { await axios.post(`${API}/book`, { ...formData, bedId: bed.id }); close(); } 
       catch(e){ alert("Error"); setLoading(false); }
   };
@@ -415,37 +585,99 @@ function BookingModal({ data, close, hostelName }) {
   if (bed.isOccupied) {
       const refundAmt = (bed.advance || 0) - (bed.maintenance || 0);
       return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md">
-                <div className="flex justify-between items-center mb-4 border-b pb-2"> <h2 className="text-xl font-bold">Room {room.number}</h2> <button onClick={close}>✕</button> </div>
-                <div className="space-y-2 mb-4 bg-gray-50 p-4 rounded"> 
-                    <div>Name: <b>{bed.clientName}</b></div> <div>Mobile: {bed.clientMobile}</div> <div>Join: {bed.joinDate}</div> <div className="text-green-600 font-bold">Refundable: ₹{refundAmt}</div>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+                <div className="bg-blue-600 p-4 text-white flex justify-between items-center">
+                    <h2 className="font-bold text-lg">Room {room.number} • Bed {bed.index + 1}</h2>
+                    <button onClick={close} className="hover:bg-blue-700 p-1 rounded">✕</button>
                 </div>
-                <a href={`https://wa.me/91${bed.clientMobile}?text=${encodeURIComponent(welcomeMsg)}`} target="_blank" className="flex items-center justify-center gap-2 w-full bg-green-100 text-green-700 py-2 rounded font-bold mb-4 border border-green-300"> <Send size={16}/> Send Welcome Message </a>
-                <div className="mb-4"> <label className="text-xs font-bold">Set Leaving Date (Turns Orange)</label> <div className="flex gap-2"> <input type="date" className="border p-2 rounded flex-1" value={newLeaveDate} onChange={e => setNewLeaveDate(e.target.value)} /> <button onClick={handleUpdateDate} className="bg-blue-600 text-white px-4 rounded font-bold">Save</button> </div> </div>
-                <button onClick={handleVacate} className="w-full bg-red-100 text-red-600 py-3 rounded font-bold flex items-center justify-center gap-2"> <UserMinus size={18} /> Vacate Tenant </button>
+                <div className="p-6">
+                    <div className="flex items-center gap-4 mb-6">
+                        <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-xl font-bold text-slate-600">
+                            {bed.clientName.charAt(0)}
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-bold text-slate-800">{bed.clientName}</h3>
+                            <p className="text-sm text-slate-500">{bed.clientMobile || "No Mobile"}</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mb-6">
+                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                            <span className="block text-xs text-slate-400 font-bold uppercase">Join Date</span>
+                            <span className="font-medium text-slate-700">{bed.joinDate}</span>
+                        </div>
+                        <div className="bg-green-50 p-3 rounded-lg border border-green-100">
+                            <span className="block text-xs text-green-600 font-bold uppercase">Refundable</span>
+                            <span className="font-bold text-green-700">₹{refundAmt}</span>
+                        </div>
+                    </div>
+                    
+                    <a href={`https://wa.me/91${bed.clientMobile}?text=${encodeURIComponent(welcomeMsg)}`} target="_blank" className="flex items-center justify-center gap-2 w-full bg-emerald-50 text-emerald-700 py-3 rounded-xl font-bold mb-6 hover:bg-emerald-100 transition-colors border border-emerald-100">
+                        <Send size={18}/> WhatsApp Welcome
+                    </a>
+
+                    <div className="border-t border-slate-100 pt-4">
+                        <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">Management</label>
+                        <div className="flex gap-2 mb-3">
+                            <input type="date" className="flex-1 border p-2 rounded-lg text-sm bg-slate-50" value={newLeaveDate} onChange={e => setNewLeaveDate(e.target.value)} />
+                            <button onClick={handleUpdateDate} className="bg-slate-800 text-white px-4 rounded-lg font-bold text-sm">Set Leave</button>
+                        </div>
+                        <button onClick={handleVacate} className="w-full text-red-600 py-2 rounded-lg font-bold text-sm hover:bg-red-50 transition-colors flex items-center justify-center gap-2">
+                            <UserMinus size={16} /> Vacate & Remove Tenant
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
       )
   }
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md">
-        <h2 className="text-xl font-bold mb-4">Book Room {room.number}</h2>
-        <form onSubmit={handleSubmit} className="space-y-3">
-            <input required placeholder="Name" className="w-full border p-2 rounded" onChange={e => setFormData({...formData, clientName: e.target.value})} />
-            <input placeholder="Mobile" className="w-full border p-2 rounded" onChange={e => setFormData({...formData, clientMobile: e.target.value})} />
-            <div className="flex gap-2"><input type="date" required className="w-full border p-2 rounded" onChange={e => setFormData({...formData, joinDate: e.target.value})} /><input type="date" className="w-full border p-2 rounded" onChange={e => setFormData({...formData, leaveDate: e.target.value})} /></div>
-            <div className="flex gap-2"><input type="number" required placeholder="Paid Advance ₹" className="w-full border p-2 rounded" onChange={e => setFormData({...formData, advance: e.target.value})} /><input type="number" required placeholder="Maintenance ₹" className="w-full border p-2 rounded" onChange={e => setFormData({...formData, maintenance: e.target.value})} /></div>
-            <div className="text-center bg-gray-100 p-2 rounded text-sm"> Refundable Advance: <span className="font-bold text-green-600">₹{refundableCalc > 0 ? refundableCalc : 0}</span> </div>
-            <button disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded font-bold flex justify-center gap-2"> {loading ? <Loader2 className="animate-spin"/> : "Confirm Booking"} </button>
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+        <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+            <h2 className="text-xl font-bold text-slate-800">New Booking</h2>
+            <button onClick={close} className="text-slate-400 hover:text-slate-600">✕</button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <div>
+                <label className="text-xs font-bold text-slate-500 uppercase">Tenant Name</label>
+                <input required className="w-full border-b-2 border-slate-100 p-2 focus:border-blue-500 outline-none transition-colors" placeholder="Enter Full Name" onChange={e => setFormData({...formData, clientName: e.target.value})} />
+            </div>
+            <div>
+                <label className="text-xs font-bold text-slate-500 uppercase">Mobile Number</label>
+                <input className="w-full border-b-2 border-slate-100 p-2 focus:border-blue-500 outline-none transition-colors" placeholder="10 Digit Number" onChange={e => setFormData({...formData, clientMobile: e.target.value})} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase">Joining Date</label>
+                    <input type="date" required className="w-full border-b-2 border-slate-100 p-2 outline-none" onChange={e => setFormData({...formData, joinDate: e.target.value})} />
+                </div>
+                <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase">Advance Paid</label>
+                    <input type="number" required className="w-full border-b-2 border-slate-100 p-2 outline-none" placeholder="₹" onChange={e => setFormData({...formData, advance: e.target.value})} />
+                </div>
+            </div>
+            <div>
+                <label className="text-xs font-bold text-slate-500 uppercase">Maintenance Charges (Non-Refundable)</label>
+                <input type="number" required className="w-full border-b-2 border-slate-100 p-2 outline-none" placeholder="₹" onChange={e => setFormData({...formData, maintenance: e.target.value})} />
+            </div>
+            
+            <div className="bg-blue-50 p-3 rounded-lg text-center">
+                <span className="text-xs text-blue-500 font-bold uppercase block">Net Refundable Advance</span>
+                <span className="text-2xl font-bold text-blue-700">₹{refundableCalc > 0 ? refundableCalc : 0}</span>
+            </div>
+
+            <button disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex justify-center gap-2 mt-2">
+                {loading ? <Loader2 className="animate-spin"/> : "Confirm Booking"}
+            </button>
         </form>
-        <button onClick={close} className="mt-2 text-gray-500 w-full text-center">Cancel</button>
       </div>
     </div>
   );
 }
 
+// --- RENT MODAL (Redesigned) ---
 function RentModal({ data, close }) {
   const { bed } = data;
   const joinDay = new Date(bed.joinDate).getDate();
@@ -453,13 +685,28 @@ function RentModal({ data, close }) {
   const handleMarkPaid = async () => { await axios.post(`${API}/pay-rent`, { bedId: bed.id, monthString: getCurrentMonth() }); window.open(`https://wa.me/91${bed.clientMobile}?text=Rent%20Received!`, '_blank'); close(); };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md">
-        <h2 className="text-xl font-bold mb-2 text-blue-900">{bed.clientName}</h2>
-        <div className="bg-gray-50 p-4 rounded mb-4"> <div>Due Date: <b>{dueDate}</b></div> <div>Total Paid: ₹{bed.advance}</div> </div>
-        <a href={`https://wa.me/91${bed.clientMobile}?text=Rent%20Due!`} target="_blank" className="flex items-center justify-center gap-2 w-full border-2 border-green-500 text-green-600 py-2 rounded font-bold mb-2"> <MessageCircle size={18} /> Send Reminder </a>
-        <button onClick={handleMarkPaid} className="flex items-center justify-center gap-2 w-full bg-green-600 text-white py-3 rounded font-bold"> <Banknote size={18} /> Mark Paid & WhatsApp </button>
-        <button onClick={close} className="mt-2 w-full text-center text-gray-500">Close</button>
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm text-center overflow-hidden">
+        <div className="bg-green-500 p-6 text-white">
+            <h2 className="text-2xl font-bold mb-1">{bed.clientName}</h2>
+            <p className="opacity-90 text-sm">Room {data.room.number}</p>
+        </div>
+        <div className="p-6">
+            <div className="mb-6">
+                <p className="text-xs font-bold text-slate-400 uppercase">Rent Due Date</p>
+                <p className="text-lg font-bold text-slate-700">{dueDate}</p>
+            </div>
+            
+            <div className="space-y-3">
+                <a href={`https://wa.me/91${bed.clientMobile}?text=Rent%20Due!`} target="_blank" className="flex items-center justify-center gap-2 w-full border border-slate-200 text-slate-600 py-3 rounded-xl font-bold hover:bg-slate-50 transition-colors">
+                    <MessageCircle size={18} /> Send Reminder
+                </a>
+                <button onClick={handleMarkPaid} className="flex items-center justify-center gap-2 w-full bg-green-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-green-200 hover:bg-green-700 transition-all">
+                    <Banknote size={18} /> Mark Paid & WhatsApp
+                </button>
+            </div>
+            <button onClick={close} className="mt-4 text-slate-400 text-sm hover:text-slate-600">Close</button>
+        </div>
       </div>
     </div>
   );
