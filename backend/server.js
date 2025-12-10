@@ -71,7 +71,6 @@ app.post('/api/login', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- ADMIN ROUTES ---
 app.get('/api/admin/users', async (req, res) => {
     try {
         const result = await query("SELECT id, username, hostel_name, is_approved FROM users WHERE username != 'admin'");
@@ -94,21 +93,16 @@ app.post('/api/admin/change-password', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// NEW: DELETE OWNER (Cascading Delete)
 app.post('/api/admin/delete-owner', async (req, res) => {
     const { userId } = req.body;
     try {
-        // 1. Delete Beds
         await query('DELETE FROM beds WHERE room_id IN (SELECT id FROM rooms WHERE user_id = $1)', [userId]);
-        // 2. Delete Rooms
         await query('DELETE FROM rooms WHERE user_id = $1', [userId]);
-        // 3. Delete User
         await query('DELETE FROM users WHERE id = $1', [userId]);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- HOSTEL ROUTES ---
 app.post('/api/setup', async (req, res) => {
     const { userId, hostelName, totalFloors, rooms } = req.body;
     try {
@@ -149,6 +143,32 @@ app.get('/api/dashboard/:userId', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// --- NEW: DYNAMIC BED MANAGEMENT (+/-) ---
+app.post('/api/rooms/add-bed', async (req, res) => {
+    const { roomId } = req.body;
+    try {
+        const roomRes = await query('SELECT capacity FROM rooms WHERE id = $1', [roomId]);
+        const currentCap = roomRes.rows[0].capacity;
+        await query('INSERT INTO beds (room_id, bed_index) VALUES ($1, $2)', [roomId, currentCap]);
+        await query('UPDATE rooms SET capacity = capacity + 1 WHERE id = $1', [roomId]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/rooms/remove-bed', async (req, res) => {
+    const { roomId } = req.body;
+    try {
+        const lastBedRes = await query('SELECT id, is_occupied FROM beds WHERE room_id = $1 ORDER BY bed_index DESC LIMIT 1', [roomId]);
+        if (lastBedRes.rows.length === 0) return res.status(400).json({ error: "No beds" });
+        if (lastBedRes.rows[0].is_occupied === 1) return res.status(400).json({ error: "Last bed is occupied!" });
+        
+        await query('DELETE FROM beds WHERE id = $1', [lastBedRes.rows[0].id]);
+        await query('UPDATE rooms SET capacity = capacity - 1 WHERE id = $1', [roomId]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// --- ACTIONS ---
 app.post('/api/book', async (req, res) => {
     const { bedId, clientName, clientMobile, joinDate, leaveDate, advance, maintenance } = req.body;
     try { await query(`UPDATE beds SET is_occupied = 1, client_name = $1, client_mobile = $2, join_date = $3, leave_date = $4, advance_amount = $5, maintenance_charges = $6, last_rent_paid = NULL WHERE id = $7`, [clientName, clientMobile, joinDate, leaveDate, advance, maintenance, bedId]); res.json({ success: true }); } catch (err) { res.status(500).json({ error: err.message }); }
@@ -156,55 +176,22 @@ app.post('/api/book', async (req, res) => {
 app.post('/api/update-leave', async (req, res) => { try { await query(`UPDATE beds SET leave_date = $1 WHERE id = $2`, [req.body.leaveDate, req.body.bedId]); res.json({ success: true }); } catch (err) { res.status(500).json({ error: err.message }); } });
 app.post('/api/pay-rent', async (req, res) => { try { await query(`UPDATE beds SET last_rent_paid = $1 WHERE id = $2`, [req.body.monthString, req.body.bedId]); res.json({ success: true }); } catch (err) { res.status(500).json({ error: err.message }); } });
 app.post('/api/vacate', async (req, res) => { try { await query(`UPDATE beds SET is_occupied = 0, client_name = NULL, client_mobile = NULL, join_date = NULL, leave_date = NULL, advance_amount = NULL, maintenance_charges = NULL, last_rent_paid = NULL WHERE id = $1`, [req.body.bedId]); res.json({ success: true }); } catch (err) { res.status(500).json({ error: err.message }); } });
-
-const PORT = process.env.PORT || 5000;
-// --- NEW: BULK IMPORT (Smart Assign) ---
 app.post('/api/import-data', async (req, res) => {
-    const { userId, tenants } = req.body; // tenants = [{ roomNo: "101", name: "Raju", mobile: "98..." }]
-    
+    const { userId, tenants } = req.body;
     try {
-        let successCount = 0;
-        let errors = [];
-
+        let successCount = 0; let errors = [];
         for (const tenant of tenants) {
-            // 1. Find the Room ID for this Room Number
-            const roomRes = await query(
-                `SELECT id FROM rooms WHERE user_id = $1 AND room_number = $2`, 
-                [userId, tenant.roomNo]
-            );
-            
-            if (roomRes.rows.length === 0) {
-                errors.push(`Room ${tenant.roomNo} not found.`);
-                continue;
-            }
-            
+            const roomRes = await query(`SELECT id FROM rooms WHERE user_id = $1 AND room_number = $2`, [userId, tenant.roomNo]);
+            if (roomRes.rows.length === 0) { errors.push(`Room ${tenant.roomNo} missing`); continue; }
             const roomId = roomRes.rows[0].id;
-
-            // 2. Find the First Empty Bed in that Room
-            const bedRes = await query(
-                `SELECT id FROM beds WHERE room_id = $1 AND is_occupied = 0 ORDER BY bed_index ASC LIMIT 1`, 
-                [roomId]
-            );
-
-            if (bedRes.rows.length === 0) {
-                errors.push(`Room ${tenant.roomNo} is full.`);
-                continue;
-            }
-
-            const bedId = bedRes.rows[0].id;
-
-            // 3. Book the Bed
-            await query(
-                `UPDATE beds SET is_occupied = 1, client_name = $1, client_mobile = $2, join_date = $3, last_rent_paid = NULL WHERE id = $4`,
-                [tenant.name, tenant.mobile || "", new Date().toISOString().slice(0,10), bedId]
-            );
+            const bedRes = await query(`SELECT id FROM beds WHERE room_id = $1 AND is_occupied = 0 ORDER BY bed_index ASC LIMIT 1`, [roomId]);
+            if (bedRes.rows.length === 0) { errors.push(`Room ${tenant.roomNo} full`); continue; }
+            await query(`UPDATE beds SET is_occupied = 1, client_name = $1, client_mobile = $2, join_date = $3, last_rent_paid = NULL WHERE id = $4`, [tenant.name, tenant.mobile || "", new Date().toISOString().slice(0,10), bedRes.rows[0].id]);
             successCount++;
         }
-
-        res.json({ success: true, message: `Imported ${successCount} tenants.`, errors });
-    } catch (err) { 
-        res.status(500).json({ error: err.message }); 
-    }
+        res.json({ success: true, message: `Imported ${successCount}`, errors });
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

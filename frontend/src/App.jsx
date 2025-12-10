@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { BedDouble, LogOut, Search, MessageCircle, Banknote, UserMinus, MousePointer2, Users, Calendar, ShieldCheck, Lock, RefreshCw, Loader2, Send, Trash2, Camera, Upload } from 'lucide-react';
+import { BedDouble, LogOut, Search, MessageCircle, Banknote, UserMinus, MousePointer2, Users, Calendar, ShieldCheck, Lock, RefreshCw, Loader2, Send, Trash2, Camera, Upload, Plus, Minus } from 'lucide-react';
 import Tesseract from 'tesseract.js';
 
 // --- CONFIGURATION ---
@@ -217,9 +217,10 @@ function Dashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('overview'); 
   const [modalData, setModalData] = useState(null); 
   const [rentFilter, setRentFilter] = useState('all');
-  const [showImport, setShowImport] = useState(false); // New Import Modal State
+  const [showImport, setShowImport] = useState(false);
 
-  useEffect(() => { axios.get(`${API}/dashboard/${user.id}`).then(res => setRooms(res.data)); }, []);
+  useEffect(() => { fetchDashboard(); }, []);
+  const fetchDashboard = () => { axios.get(`${API}/dashboard/${user.id}`).then(res => setRooms(res.data)); };
   
   const handleReset = async () => {
       if(confirm("⚠ DELETE ALL DATA? Use this to fix layout mistakes.")) {
@@ -227,6 +228,16 @@ function Dashboard({ user, onLogout }) {
           localStorage.setItem('hostelUser', JSON.stringify({ ...user, setup_complete: 0 }));
           window.location.reload();
       }
+  };
+
+  const handleAddBed = async (roomId) => {
+      try { await axios.post(`${API}/rooms/add-bed`, { roomId }); fetchDashboard(); } 
+      catch(e) { alert("Error adding bed"); }
+  };
+
+  const handleRemoveBed = async (roomId) => {
+      try { await axios.post(`${API}/rooms/remove-bed`, { roomId }); fetchDashboard(); } 
+      catch(e) { alert(e.response.data.error || "Error removing bed"); }
   };
 
   return (
@@ -247,9 +258,9 @@ function Dashboard({ user, onLogout }) {
                 <h2 className="text-lg font-bold text-gray-500 mb-3 border-b-2">{parseInt(floor) === 0 ? "GROUND FLOOR" : `FLOOR ${floor}`}</h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                     {floorRooms.map(room => (
-                        <div key={room.id} className="bg-white p-3 rounded-lg shadow border-t-4 border-blue-500">
+                        <div key={room.id} className="bg-white p-3 rounded-lg shadow border-t-4 border-blue-500 relative">
                             <div className="font-bold text-center mb-2">{room.number}</div>
-                            <div className="flex justify-center gap-2 flex-wrap">
+                            <div className="flex justify-center gap-2 flex-wrap mb-2">
                                 {room.beds.map((bed, i) => {
                                     if(activeTab === 'rent' && !bed.isOccupied) return null; 
                                     const isPaid = bed.lastRentPaid === getCurrentMonth();
@@ -263,24 +274,32 @@ function Dashboard({ user, onLogout }) {
                                     return <div key={i} onClick={() => setModalData({ type: activeTab==='rent'?'rent':'booking', room, bed })} className={`w-8 h-8 rounded-full cursor-pointer flex items-center justify-center text-white text-xs font-bold shadow-sm ${color}`}>{i + 1}</div>;
                                 })}
                             </div>
+                            
+                            {/* --- NEW: +/- BUTTONS --- */}
+                            {activeTab === 'overview' && (
+                                <div className="flex justify-center gap-2 border-t pt-2 mt-2">
+                                    <button onClick={() => handleAddBed(room.id)} className="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200" title="Add Bed"><Plus size={14}/></button>
+                                    <button onClick={() => handleRemoveBed(room.id)} className="p-1 bg-red-100 text-red-600 rounded hover:bg-red-200" title="Remove Last Bed"><Minus size={14}/></button>
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>
             </div>
         ))}
       </div>
-      {modalData && modalData.type === 'booking' && <BookingModal data={modalData} hostelName={user.hostel_name} close={() => { setModalData(null); window.location.reload(); }} />}
-      {modalData && modalData.type === 'rent' && <RentModal data={modalData} close={() => { setModalData(null); window.location.reload(); }} />}
+      {modalData && modalData.type === 'booking' && <BookingModal data={modalData} hostelName={user.hostel_name} close={() => { setModalData(null); fetchDashboard(); }} />}
+      {modalData && modalData.type === 'rent' && <RentModal data={modalData} close={() => { setModalData(null); fetchDashboard(); }} />}
       {showImport && <ImportModal user={user} close={() => setShowImport(false)} />}
     </div>
   );
 }
 
-// --- NEW IMPORT MODAL (OCR) ---
+// --- NEW IMPORT MODAL ---
 function ImportModal({ user, close }) {
-    const [scanStatus, setScanStatus] = useState(""); // "scanning" | "done"
+    const [scanStatus, setScanStatus] = useState(""); 
     const [scannedText, setScannedText] = useState("");
-    const [parsedData, setParsedData] = useState([]); // [{roomNo, name, mobile}]
+    const [parsedData, setParsedData] = useState([]);
     const [loading, setLoading] = useState(false);
 
     const handleImageUpload = (e) => {
@@ -288,11 +307,7 @@ function ImportModal({ user, close }) {
         if(!file) return;
         setScanStatus("scanning");
         
-        Tesseract.recognize(
-            file,
-            'eng',
-            { logger: m => console.log(m) }
-        ).then(({ data: { text } }) => {
+        Tesseract.recognize(file, 'eng').then(({ data: { text } }) => {
             setScannedText(text);
             setScanStatus("done");
             parseText(text);
@@ -300,32 +315,17 @@ function ImportModal({ user, close }) {
     };
 
     const parseText = (text) => {
-        // Simple logic: Try to guess Room Number and Name from each line
-        // Expected format guess: "101 Raju 99999"
         const lines = text.split('\n');
         const detected = [];
-        
         lines.forEach(line => {
             const cleanLine = line.trim();
             if(cleanLine.length < 5) return;
-
-            // Simple Regex to look for 3 digit number (Room)
             const roomMatch = cleanLine.match(/\b\d{3}\b/);
-            // Regex to look for Mobile (10 digits)
             const mobileMatch = cleanLine.match(/\b\d{10}\b/);
-            
             if(roomMatch) {
-                // assume rest of string is name
                 let name = cleanLine.replace(roomMatch[0], "").replace(mobileMatch ? mobileMatch[0] : "", "").trim();
-                name = name.replace(/[^a-zA-Z ]/g, ""); // Clean symbols
-                
-                if(name) {
-                    detected.push({ 
-                        roomNo: roomMatch[0], 
-                        name: name, 
-                        mobile: mobileMatch ? mobileMatch[0] : "" 
-                    });
-                }
+                name = name.replace(/[^a-zA-Z ]/g, "");
+                if(name) detected.push({ roomNo: roomMatch[0], name: name, mobile: mobileMatch ? mobileMatch[0] : "" });
             }
         });
         setParsedData(detected);
@@ -338,51 +338,26 @@ function ImportModal({ user, close }) {
             alert(res.data.message);
             if(res.data.errors.length > 0) alert("Errors:\n" + res.data.errors.join("\n"));
             window.location.reload();
-        } catch(e) {
-            alert("Import failed.");
-            setLoading(false);
-        }
+        } catch(e) { alert("Import failed."); setLoading(false); }
     };
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-                <div className="flex justify-between items-center mb-4 border-b pb-2">
-                    <h2 className="text-xl font-bold flex gap-2"><Camera/> Import from Image</h2>
-                    <button onClick={close} className="font-bold text-gray-500 text-xl">✕</button>
-                </div>
-
-                <div className="mb-6 p-4 bg-blue-50 rounded border border-blue-200">
-                    <p className="text-sm text-blue-800 mb-2"><b>Instructions:</b> Take a photo of your register. Ensure good lighting.</p>
-                    <input type="file" accept="image/*" onChange={handleImageUpload} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
-                </div>
-
+                <div className="flex justify-between items-center mb-4 border-b pb-2"> <h2 className="text-xl font-bold flex gap-2"><Camera/> Import from Image</h2> <button onClick={close} className="font-bold text-gray-500 text-xl">✕</button> </div>
+                <div className="mb-6 p-4 bg-blue-50 rounded border border-blue-200"> <p className="text-sm text-blue-800 mb-2"><b>Instructions:</b> Take a photo of your register.</p> <input type="file" accept="image/*" onChange={handleImageUpload} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/> </div>
                 {scanStatus === "scanning" && <div className="text-center py-10"><Loader2 className="animate-spin mx-auto mb-2 text-blue-600" size={40}/><p>Scanning Text...</p></div>}
-
                 {scanStatus === "done" && (
                     <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="font-bold text-sm block mb-1">Raw Text (Edit if needed)</label>
-                            <textarea 
-                                className="w-full h-64 border p-2 text-xs font-mono bg-gray-50" 
-                                value={scannedText} 
-                                onChange={(e) => { setScannedText(e.target.value); parseText(e.target.value); }}
-                            />
-                        </div>
+                        <div> <label className="font-bold text-sm block mb-1">Raw Text</label> <textarea className="w-full h-64 border p-2 text-xs font-mono bg-gray-50" value={scannedText} onChange={(e) => { setScannedText(e.target.value); parseText(e.target.value); }} /> </div>
                         <div>
                             <label className="font-bold text-sm block mb-1">Detected Data ({parsedData.length})</label>
                             <div className="h-64 overflow-y-auto border bg-gray-50 p-2 text-sm">
-                                {parsedData.length === 0 ? <p className="text-gray-400 italic">No rooms detected yet. Try editing the Raw Text.</p> : (
+                                {parsedData.length === 0 ? <p className="text-gray-400 italic">No rooms detected.</p> : (
                                     <table className="w-full">
                                         <thead><tr className="text-left text-xs text-gray-500"><th>Room</th><th>Name</th><th>Mobile</th></tr></thead>
                                         <tbody>
-                                            {parsedData.map((d, i) => (
-                                                <tr key={i} className="border-b">
-                                                    <td className="font-bold text-blue-700">{d.roomNo}</td>
-                                                    <td>{d.name}</td>
-                                                    <td className="text-xs text-gray-500">{d.mobile || "-"}</td>
-                                                </tr>
-                                            ))}
+                                            {parsedData.map((d, i) => ( <tr key={i} className="border-b"> <td className="font-bold text-blue-700">{d.roomNo}</td> <td>{d.name}</td> <td className="text-xs text-gray-500">{d.mobile || "-"}</td> </tr> ))}
                                         </tbody>
                                     </table>
                                 )}
@@ -390,12 +365,7 @@ function ImportModal({ user, close }) {
                         </div>
                     </div>
                 )}
-
-                {parsedData.length > 0 && (
-                    <button disabled={loading} onClick={handleImport} className="w-full bg-green-600 text-white py-3 rounded font-bold mt-4 flex justify-center gap-2 hover:bg-green-700">
-                        {loading ? <Loader2 className="animate-spin"/> : `Import ${parsedData.length} Tenants`}
-                    </button>
-                )}
+                {parsedData.length > 0 && <button disabled={loading} onClick={handleImport} className="w-full bg-green-600 text-white py-3 rounded font-bold mt-4 flex justify-center gap-2 hover:bg-green-700"> {loading ? <Loader2 className="animate-spin"/> : `Import ${parsedData.length} Tenants`} </button>}
             </div>
         </div>
     );
@@ -429,16 +399,9 @@ function BookingModal({ data, close, hostelName }) {
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
                 <div className="flex justify-between items-center mb-4 border-b pb-2"> <h2 className="text-xl font-bold">Room {room.number}</h2> <button onClick={close}>✕</button> </div>
                 <div className="space-y-2 mb-4 bg-gray-50 p-4 rounded"> 
-                    <div>Name: <b>{bed.clientName}</b></div> 
-                    <div>Mobile: {bed.clientMobile}</div> 
-                    <div>Join: {bed.joinDate}</div> 
-                    <div className="text-green-600 font-bold">Refundable: ₹{refundAmt}</div>
+                    <div>Name: <b>{bed.clientName}</b></div> <div>Mobile: {bed.clientMobile}</div> <div>Join: {bed.joinDate}</div> <div className="text-green-600 font-bold">Refundable: ₹{refundAmt}</div>
                 </div>
-                
-                <a href={`https://wa.me/91${bed.clientMobile}?text=${encodeURIComponent(welcomeMsg)}`} target="_blank" className="flex items-center justify-center gap-2 w-full bg-green-100 text-green-700 py-2 rounded font-bold mb-4 border border-green-300">
-                    <Send size={16}/> Send Welcome Message
-                </a>
-
+                <a href={`https://wa.me/91${bed.clientMobile}?text=${encodeURIComponent(welcomeMsg)}`} target="_blank" className="flex items-center justify-center gap-2 w-full bg-green-100 text-green-700 py-2 rounded font-bold mb-4 border border-green-300"> <Send size={16}/> Send Welcome Message </a>
                 <div className="mb-4"> <label className="text-xs font-bold">Set Leaving Date (Turns Orange)</label> <div className="flex gap-2"> <input type="date" className="border p-2 rounded flex-1" value={newLeaveDate} onChange={e => setNewLeaveDate(e.target.value)} /> <button onClick={handleUpdateDate} className="bg-blue-600 text-white px-4 rounded font-bold">Save</button> </div> </div>
                 <button onClick={handleVacate} className="w-full bg-red-100 text-red-600 py-3 rounded font-bold flex items-center justify-center gap-2"> <UserMinus size={18} /> Vacate Tenant </button>
             </div>
@@ -454,14 +417,8 @@ function BookingModal({ data, close, hostelName }) {
             <input placeholder="Mobile" className="w-full border p-2 rounded" onChange={e => setFormData({...formData, clientMobile: e.target.value})} />
             <div className="flex gap-2"><input type="date" required className="w-full border p-2 rounded" onChange={e => setFormData({...formData, joinDate: e.target.value})} /><input type="date" className="w-full border p-2 rounded" onChange={e => setFormData({...formData, leaveDate: e.target.value})} /></div>
             <div className="flex gap-2"><input type="number" required placeholder="Paid Advance ₹" className="w-full border p-2 rounded" onChange={e => setFormData({...formData, advance: e.target.value})} /><input type="number" required placeholder="Maintenance ₹" className="w-full border p-2 rounded" onChange={e => setFormData({...formData, maintenance: e.target.value})} /></div>
-            
-            <div className="text-center bg-gray-100 p-2 rounded text-sm">
-                Refundable Advance: <span className="font-bold text-green-600">₹{refundableCalc > 0 ? refundableCalc : 0}</span>
-            </div>
-
-            <button disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded font-bold flex justify-center gap-2">
-                {loading ? <Loader2 className="animate-spin"/> : "Confirm Booking"}
-            </button>
+            <div className="text-center bg-gray-100 p-2 rounded text-sm"> Refundable Advance: <span className="font-bold text-green-600">₹{refundableCalc > 0 ? refundableCalc : 0}</span> </div>
+            <button disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded font-bold flex justify-center gap-2"> {loading ? <Loader2 className="animate-spin"/> : "Confirm Booking"} </button>
         </form>
         <button onClick={close} className="mt-2 text-gray-500 w-full text-center">Cancel</button>
       </div>
@@ -480,10 +437,8 @@ function RentModal({ data, close }) {
       <div className="bg-white rounded-lg p-6 w-full max-w-md">
         <h2 className="text-xl font-bold mb-2 text-blue-900">{bed.clientName}</h2>
         <div className="bg-gray-50 p-4 rounded mb-4"> <div>Due Date: <b>{dueDate}</b></div> <div>Total Paid: ₹{bed.advance}</div> </div>
-        
         <a href={`https://wa.me/91${bed.clientMobile}?text=Rent%20Due!`} target="_blank" className="flex items-center justify-center gap-2 w-full border-2 border-green-500 text-green-600 py-2 rounded font-bold mb-2"> <MessageCircle size={18} /> Send Reminder </a>
         <button onClick={handleMarkPaid} className="flex items-center justify-center gap-2 w-full bg-green-600 text-white py-3 rounded font-bold"> <Banknote size={18} /> Mark Paid & WhatsApp </button>
-        
         <button onClick={close} className="mt-2 w-full text-center text-gray-500">Close</button>
       </div>
     </div>
