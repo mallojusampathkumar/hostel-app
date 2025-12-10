@@ -143,7 +143,6 @@ app.get('/api/dashboard/:userId', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- NEW: DYNAMIC BED MANAGEMENT (+/-) ---
 app.post('/api/rooms/add-bed', async (req, res) => {
     const { roomId } = req.body;
     try {
@@ -161,14 +160,12 @@ app.post('/api/rooms/remove-bed', async (req, res) => {
         const lastBedRes = await query('SELECT id, is_occupied FROM beds WHERE room_id = $1 ORDER BY bed_index DESC LIMIT 1', [roomId]);
         if (lastBedRes.rows.length === 0) return res.status(400).json({ error: "No beds" });
         if (lastBedRes.rows[0].is_occupied === 1) return res.status(400).json({ error: "Last bed is occupied!" });
-        
         await query('DELETE FROM beds WHERE id = $1', [lastBedRes.rows[0].id]);
         await query('UPDATE rooms SET capacity = capacity - 1 WHERE id = $1', [roomId]);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- ACTIONS ---
 app.post('/api/book', async (req, res) => {
     const { bedId, clientName, clientMobile, joinDate, leaveDate, advance, maintenance } = req.body;
     try { await query(`UPDATE beds SET is_occupied = 1, client_name = $1, client_mobile = $2, join_date = $3, leave_date = $4, advance_amount = $5, maintenance_charges = $6, last_rent_paid = NULL WHERE id = $7`, [clientName, clientMobile, joinDate, leaveDate, advance, maintenance, bedId]); res.json({ success: true }); } catch (err) { res.status(500).json({ error: err.message }); }
@@ -176,20 +173,55 @@ app.post('/api/book', async (req, res) => {
 app.post('/api/update-leave', async (req, res) => { try { await query(`UPDATE beds SET leave_date = $1 WHERE id = $2`, [req.body.leaveDate, req.body.bedId]); res.json({ success: true }); } catch (err) { res.status(500).json({ error: err.message }); } });
 app.post('/api/pay-rent', async (req, res) => { try { await query(`UPDATE beds SET last_rent_paid = $1 WHERE id = $2`, [req.body.monthString, req.body.bedId]); res.json({ success: true }); } catch (err) { res.status(500).json({ error: err.message }); } });
 app.post('/api/vacate', async (req, res) => { try { await query(`UPDATE beds SET is_occupied = 0, client_name = NULL, client_mobile = NULL, join_date = NULL, leave_date = NULL, advance_amount = NULL, maintenance_charges = NULL, last_rent_paid = NULL WHERE id = $1`, [req.body.bedId]); res.json({ success: true }); } catch (err) { res.status(500).json({ error: err.message }); } });
+
+// --- SMART IMPORT (DUPLICATE CHECK + AUTO UPGRADE + DATE) ---
 app.post('/api/import-data', async (req, res) => {
     const { userId, tenants } = req.body;
     try {
-        let successCount = 0; let errors = [];
+        let successCount = 0; let skippedCount = 0; let errors = [];
+        
         for (const tenant of tenants) {
-            const roomRes = await query(`SELECT id FROM rooms WHERE user_id = $1 AND room_number = $2`, [userId, tenant.roomNo]);
-            if (roomRes.rows.length === 0) { errors.push(`Room ${tenant.roomNo} missing`); continue; }
+            // 1. DUPLICATE CHECK: Skip if Name OR Mobile exists in any room of this user
+            const dupCheck = await query(`
+                SELECT b.id FROM beds b 
+                JOIN rooms r ON b.room_id = r.id 
+                WHERE r.user_id = $1 AND b.is_occupied = 1 
+                AND (b.client_name = $2 OR (b.client_mobile IS NOT NULL AND b.client_mobile != '' AND b.client_mobile = $3))
+            `, [userId, tenant.name, tenant.mobile]);
+
+            if (dupCheck.rows.length > 0) {
+                skippedCount++;
+                continue; // Skip this tenant
+            }
+
+            // 2. FIND ROOM
+            const roomRes = await query(`SELECT id, capacity FROM rooms WHERE user_id = $1 AND room_number = $2`, [userId, tenant.roomNo]);
+            if (roomRes.rows.length === 0) { errors.push(`Room ${tenant.roomNo} not found`); continue; }
+            
             const roomId = roomRes.rows[0].id;
+            const currentCap = roomRes.rows[0].capacity;
+
+            // 3. FIND EMPTY BED
+            let bedId;
             const bedRes = await query(`SELECT id FROM beds WHERE room_id = $1 AND is_occupied = 0 ORDER BY bed_index ASC LIMIT 1`, [roomId]);
-            if (bedRes.rows.length === 0) { errors.push(`Room ${tenant.roomNo} full`); continue; }
-            await query(`UPDATE beds SET is_occupied = 1, client_name = $1, client_mobile = $2, join_date = $3, last_rent_paid = NULL WHERE id = $4`, [tenant.name, tenant.mobile || "", new Date().toISOString().slice(0,10), bedRes.rows[0].id]);
+            
+            if (bedRes.rows.length > 0) {
+                // Bed Available
+                bedId = bedRes.rows[0].id;
+            } else {
+                // 4. AUTO UPGRADE: Room full? Add new bed!
+                const newBedRes = await query(`INSERT INTO beds (room_id, bed_index) VALUES ($1, $2) RETURNING id`, [roomId, currentCap]); // index = old capacity (e.g., if cap is 2, indexes are 0,1. New index is 2)
+                bedId = newBedRes.rows[0].id;
+                await query(`UPDATE rooms SET capacity = capacity + 1 WHERE id = $1`, [roomId]);
+            }
+
+            // 5. BOOK IT (Use tenant.joinDate if provided, else Today)
+            const finalJoinDate = tenant.joinDate || new Date().toISOString().slice(0,10);
+            await query(`UPDATE beds SET is_occupied = 1, client_name = $1, client_mobile = $2, join_date = $3, last_rent_paid = NULL WHERE id = $4`, 
+                [tenant.name, tenant.mobile || "", finalJoinDate, bedId]);
             successCount++;
         }
-        res.json({ success: true, message: `Imported ${successCount}`, errors });
+        res.json({ success: true, message: `Imported: ${successCount}, Skipped (Duplicate): ${skippedCount}`, errors });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

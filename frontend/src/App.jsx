@@ -275,7 +275,7 @@ function Dashboard({ user, onLogout }) {
                                 })}
                             </div>
                             
-                            {/* --- NEW: +/- BUTTONS --- */}
+                            {/* +/- BUTTONS */}
                             {activeTab === 'overview' && (
                                 <div className="flex justify-center gap-2 border-t pt-2 mt-2">
                                     <button onClick={() => handleAddBed(room.id)} className="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200" title="Add Bed"><Plus size={14}/></button>
@@ -295,7 +295,7 @@ function Dashboard({ user, onLogout }) {
   );
 }
 
-// --- NEW IMPORT MODAL ---
+// --- NEW IMPORT MODAL (PARSING DATE) ---
 function ImportModal({ user, close }) {
     const [scanStatus, setScanStatus] = useState(""); 
     const [scannedText, setScannedText] = useState("");
@@ -317,15 +317,35 @@ function ImportModal({ user, close }) {
     const parseText = (text) => {
         const lines = text.split('\n');
         const detected = [];
+        // Regex to look for date (DD-MM-YYYY or similar)
+        const dateRegex = /\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b/;
+
         lines.forEach(line => {
             const cleanLine = line.trim();
             if(cleanLine.length < 5) return;
             const roomMatch = cleanLine.match(/\b\d{3}\b/);
             const mobileMatch = cleanLine.match(/\b\d{10}\b/);
+            const dateMatch = cleanLine.match(dateRegex);
+
             if(roomMatch) {
-                let name = cleanLine.replace(roomMatch[0], "").replace(mobileMatch ? mobileMatch[0] : "", "").trim();
+                let name = cleanLine.replace(roomMatch[0], "").replace(mobileMatch ? mobileMatch[0] : "", "").replace(dateMatch ? dateMatch[0] : "", "").trim();
                 name = name.replace(/[^a-zA-Z ]/g, "");
-                if(name) detected.push({ roomNo: roomMatch[0], name: name, mobile: mobileMatch ? mobileMatch[0] : "" });
+                
+                let isoDate = null;
+                if(dateMatch) {
+                    // Convert typical indian format DD-MM-YYYY to ISO YYYY-MM-DD
+                    try {
+                        const parts = dateMatch[0].split(/[./-]/);
+                        if(parts.length === 3) isoDate = `${parts[2].length===2?'20'+parts[2]:parts[2]}-${parts[1]}-${parts[0]}`; // YYYY-MM-DD
+                    } catch(e){}
+                }
+
+                if(name) detected.push({ 
+                    roomNo: roomMatch[0], 
+                    name: name, 
+                    mobile: mobileMatch ? mobileMatch[0] : "",
+                    joinDate: isoDate // Send this to backend
+                });
             }
         });
         setParsedData(detected);
@@ -355,9 +375,9 @@ function ImportModal({ user, close }) {
                             <div className="h-64 overflow-y-auto border bg-gray-50 p-2 text-sm">
                                 {parsedData.length === 0 ? <p className="text-gray-400 italic">No rooms detected.</p> : (
                                     <table className="w-full">
-                                        <thead><tr className="text-left text-xs text-gray-500"><th>Room</th><th>Name</th><th>Mobile</th></tr></thead>
+                                        <thead><tr className="text-left text-xs text-gray-500"><th>Room</th><th>Name</th><th>Date</th></tr></thead>
                                         <tbody>
-                                            {parsedData.map((d, i) => ( <tr key={i} className="border-b"> <td className="font-bold text-blue-700">{d.roomNo}</td> <td>{d.name}</td> <td className="text-xs text-gray-500">{d.mobile || "-"}</td> </tr> ))}
+                                            {parsedData.map((d, i) => ( <tr key={i} className="border-b"> <td className="font-bold text-blue-700">{d.roomNo}</td> <td>{d.name}</td> <td className="text-xs text-gray-500">{d.joinDate || "Today"}</td> </tr> ))}
                                         </tbody>
                                     </table>
                                 )}
