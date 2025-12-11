@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "com.hostelapp.manager",
+        "sha256_cert_fingerprints": ["60:24:91:74:00:B0:C7:48:EF:BE:E1:82:CD:2C:7B:08:94:1C:C2:F2:ED:1B:CD:DF:42:DB:37:6B:8E:15:5A:77"]
+      }
+    }]
