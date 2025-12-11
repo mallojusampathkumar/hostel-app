@@ -10,11 +10,13 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// --- FIXED EMAIL CONFIGURATION (Force IPv4) ---
+// --- FIXED EMAIL CONFIGURATION (Ultimate Fix) ---
+// 1. Port 465 (SSL) is less likely to be blocked than 587.
+// 2. family: 4 forces the server to use IPv4 (fixing the timeout).
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // True for 465, false for other ports
+    port: 465,       // Secure Port
+    secure: true,    // Must be true for 465
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
@@ -22,8 +24,8 @@ const transporter = nodemailer.createTransport({
     tls: {
         rejectUnauthorized: false
     },
-    family: 4, // <--- THIS IS THE FIX (Forces IPv4 to prevent timeouts)
-    connectionTimeout: 20000 // Wait up to 20 seconds
+    family: 4,       // <--- FORCE IPv4 (Fixes Render Timeouts)
+    connectionTimeout: 30000 // 30 seconds timeout
 });
 
 const pool = new Pool({
@@ -35,7 +37,7 @@ const query = (text, params) => pool.query(text, params);
 
 // --- ROUTES ---
 
-// 1. LOGIN / REGISTER
+// 1. LOGIN / REGISTER (Auto-Approve + Email)
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
     const email = req.body.email ? req.body.email.trim().toLowerCase() : null;
@@ -59,7 +61,7 @@ app.post('/api/login', async (req, res) => {
                     from: `"Hostel Manager" <${process.env.EMAIL_USER}>`,
                     to: email,
                     subject: 'Welcome to Hostel Manager',
-                    text: `Hello ${username},\n\nYour account has been created.\n\nLogin here: https://hostel-app-xi.vercel.app`
+                    text: `Hello ${username},\n\nYour account has been created successfully.\nUsername: ${username}\nPassword: ${password}\n\nLogin here: https://hostel-app-xi.vercel.app`
                 }).then(() => console.log("Welcome Email Sent"))
                   .catch(err => console.error("Welcome Email Failed:", err.message));
             }
@@ -81,35 +83,35 @@ app.post('/api/login', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 2. FORGOT PASSWORD
+// 2. FORGOT PASSWORD (Robust)
 app.post('/api/forgot-password', async (req, res) => {
     const email = req.body.email ? req.body.email.trim().toLowerCase() : "";
     try {
-        // Check DB
         const result = await query('SELECT * FROM users WHERE LOWER(email) = $1', [email]);
         if (result.rows.length === 0) return res.status(404).json({ error: "Email not registered." });
 
-        // Reset
         const tempPass = Math.random().toString(36).slice(-8);
         const hash = bcrypt.hashSync(tempPass, 10);
         await query('UPDATE users SET password = $1 WHERE email = $2', [hash, email]);
 
-        // Send
+        console.log(`Sending Recovery to ${email}...`);
+        
         await transporter.sendMail({
             from: `"Hostel Manager" <${process.env.EMAIL_USER}>`,
             to: email,
             subject: 'Password Reset',
-            text: `Your new temporary password is: ${tempPass}\n\nPlease login and change it.`
+            text: `Your new temporary password is: ${tempPass}\n\nPlease login and change it immediately.`
         });
 
+        console.log("Recovery Email Sent.");
         res.json({ success: true, message: "Password sent to email." });
     } catch (err) { 
         console.error("Email Error:", err);
-        res.status(500).json({ error: "Email failed. Check server logs." }); 
+        res.status(500).json({ error: "Email server timeout. Try again later." }); 
     }
 });
 
-// --- STANDARD ROUTES (Admin, Setup, Dashboard, etc.) ---
+// --- STANDARD ROUTES ---
 app.get('/api/admin/users', async (req, res) => { try { const r = await query("SELECT * FROM users WHERE username != 'admin'"); res.json(r.rows); } catch (e) { res.status(500).json(e); } });
 app.post('/api/admin/approve', async (req, res) => { try { await query('UPDATE users SET is_approved = $1 WHERE id = $2', [req.body.status, req.body.userId]); res.json({success:true}); } catch (e) { res.status(500).json(e); } });
 app.post('/api/admin/change-password', async (req, res) => { const h = bcrypt.hashSync(req.body.newPassword, 10); try { await query('UPDATE users SET password = $1 WHERE username = $2', [h, 'admin']); res.json({success:true}); } catch (e) { res.status(500).json(e); } });
