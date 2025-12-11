@@ -226,4 +226,15 @@ app.post('/api/import-data', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
+// --- NEW: EDIT TENANT DETAILS (Advance/Maintenance/Leave) ---
+app.post('/api/update-tenant', async (req, res) => {
+    const { bedId, advance, maintenance, leaveDate } = req.body;
+    try {
+        await query(
+            `UPDATE beds SET advance_amount = $1, maintenance_charges = $2, leave_date = $3 WHERE id = $4`,
+            [advance, maintenance, leaveDate || null, bedId]
+        );
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
