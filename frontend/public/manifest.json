@@ -8,7 +8,7 @@
   "short_name": "Hostel",
   "start_url": "/",
   "theme_color": "#2563eb",
- "icons": [
+  "icons": [
     {
       "src": "/logo.png",
       "type": "image/png",
