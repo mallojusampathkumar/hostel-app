@@ -10,20 +10,14 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// --- FIXED EMAIL CONFIGURATION (Port 587 + TLS) ---
-// This setting is more firewall-friendly for Render/Cloud servers
+// --- BEST GMAIL CONFIGURATION ---
+// "service: gmail" automatically handles ports/security for you
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587, // Standard Port
-    secure: false, // False for 587 (uses STARTTLS)
+    service: 'gmail', 
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
-    },
-    tls: {
-        rejectUnauthorized: false // Fixes "Self-signed certificate" errors
-    },
-    connectionTimeout: 10000
+    }
 });
 
 const pool = new Pool({
@@ -35,10 +29,9 @@ const query = (text, params) => pool.query(text, params);
 
 // --- ROUTES ---
 
-// 1. LOGIN / REGISTER (With Space Removal)
+// 1. LOGIN / REGISTER (Auto-Approve + Email Save)
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
-    // Clean up the email (remove spaces)
     const email = req.body.email ? req.body.email.trim().toLowerCase() : null;
 
     try {
@@ -54,27 +47,23 @@ app.post('/api/login', async (req, res) => {
             );
             
             // Welcome Email
-            if(email) {
-                console.log(`Sending Welcome Email to: ${email}`);
+            if(email && process.env.EMAIL_USER) {
                 transporter.sendMail({
                     from: `"Hostel Manager" <${process.env.EMAIL_USER}>`,
                     to: email,
                     subject: 'Welcome to Hostel Manager',
-                    text: `Hello ${username},\n\nYour account has been created successfully.\nUsername: ${username}\nPassword: ${password}\n\nLogin App: https://hostel-app-xi.vercel.app`
-                }).catch(err => console.error("Welcome Email Failed:", err.message));
+                    text: `Hello ${username},\n\nYour account is ready.\nUsername: ${username}\nPassword: ${password}\n\nLogin: https://hostel-app-xi.vercel.app`
+                }).catch(e => console.log("Welcome email error:", e.message));
             }
-
             res.json(newUser.rows[0]); 
         } else {
             // LOGIN
             if (bcrypt.compareSync(password, user.password)) {
-                // If user didn't have an email before, update it now
-                if(email && user.email !== email) {
-                    await query('UPDATE users SET email = $1 WHERE id = $2', [email, user.id]);
-                }
+                // Update email if it was missing
+                if(email && !user.email) await query('UPDATE users SET email = $1 WHERE id = $2', [email, user.id]);
                 
                 if (user.is_approved === 1) res.json(user);
-                else res.status(403).json({ error: "Account blocked." });
+                else res.status(403).json({ error: "Account blocked by Admin." });
             } else {
                 res.status(401).json({ error: "Invalid password" });
             }
@@ -82,43 +71,40 @@ app.post('/api/login', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 2. FORGOT PASSWORD (With Debugging & Trimming)
+// 2. FORGOT PASSWORD (Robust Error Handling)
 app.post('/api/forgot-password', async (req, res) => {
-    // Clean input
     const email = req.body.email ? req.body.email.trim().toLowerCase() : "";
-    console.log(`Password Reset Requested for: '${email}'`);
-
     try {
-        // 1. Check if email exists
+        // 1. Check DB
         const result = await query('SELECT * FROM users WHERE LOWER(email) = $1', [email]);
-        if (result.rows.length === 0) {
-            console.log("Email not found in DB.");
-            return res.status(404).json({ error: "Email not found." });
+        if (result.rows.length === 0) return res.status(404).json({ error: "Email not registered." });
+
+        // 2. Check Credentials Configured
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+            return res.status(500).json({ error: "Server Email Config Missing." });
         }
 
-        // 2. Generate Password
+        // 3. Reset
         const tempPass = Math.random().toString(36).slice(-8);
         const hash = bcrypt.hashSync(tempPass, 10);
-        
         await query('UPDATE users SET password = $1 WHERE email = $2', [hash, email]);
 
-        // 3. Send Email
-        console.log(`Sending Recovery Email to: ${email}`);
+        // 4. Send
         await transporter.sendMail({
             from: `"Hostel Manager" <${process.env.EMAIL_USER}>`,
             to: email,
-            subject: 'Password Reset Request',
-            text: `Your new temporary password is: ${tempPass}\n\nPlease login and change it immediately.`
+            subject: 'Password Reset',
+            text: `Your new password is: ${tempPass}\n\nPlease login and change it.`
         });
 
         res.json({ success: true, message: "Password sent to email." });
     } catch (err) { 
-        console.error("Forgot Password Error:", err.message);
-        res.status(500).json({ error: "Server Error. Check logs." }); 
+        console.error("Email Error:", err);
+        res.status(500).json({ error: "Email server timeout. Try again." }); 
     }
 });
 
-// --- REST OF ROUTES (UNCHANGED) ---
+// --- STANDARD ROUTES (Admin, Setup, Dashboard, etc.) ---
 app.get('/api/admin/users', async (req, res) => { try { const r = await query("SELECT * FROM users WHERE username != 'admin'"); res.json(r.rows); } catch (e) { res.status(500).json(e); } });
 app.post('/api/admin/approve', async (req, res) => { try { await query('UPDATE users SET is_approved = $1 WHERE id = $2', [req.body.status, req.body.userId]); res.json({success:true}); } catch (e) { res.status(500).json(e); } });
 app.post('/api/admin/change-password', async (req, res) => { const h = bcrypt.hashSync(req.body.newPassword, 10); try { await query('UPDATE users SET password = $1 WHERE username = $2', [h, 'admin']); res.json({success:true}); } catch (e) { res.status(500).json(e); } });
