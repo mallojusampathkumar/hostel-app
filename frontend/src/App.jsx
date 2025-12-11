@@ -74,7 +74,10 @@ function LoginPage({ onLogin, onBack }) {
       try {
           await axios.post(`${API}/forgot-password`, { email: creds.email });
           setMsg({ text: "Password sent to your email!", type: 'success' });
-      } catch(e) { setMsg({ text: "Email not found.", type: 'error' }); }
+      } catch(e) { 
+          // 👇 FIXED: Now shows the REAL error from the backend
+          setMsg({ text: e.response?.data?.error || "Error sending email.", type: 'error' }); 
+      }
       setLoading(false);
   };
 
