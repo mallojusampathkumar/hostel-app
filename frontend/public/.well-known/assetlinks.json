@@ -1,8 +1,12 @@
-[{
-      "relation": ["delegate_permission/common.handle_all_urls"],
-      "target": {
-        "namespace": "android_app",
-        "package_name": "com.hostelapp.manager",
-        "sha256_cert_fingerprints": ["60:24:91:74:00:B0:C7:48:EF:BE:E1:82:CD:2C:7B:08:94:1C:C2:F2:ED:1B:CD:DF:42:DB:37:6B:8E:15:5A:77"]
-      }
-    }]
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.hostelapp.manager",
+      "sha256_cert_fingerprints": [
+        "4A:A9:80:30:1B:23:42:B0:4A:2F:35:B1:3D:79:8C:63:6D:BC:68:A9:CE:61:A4:05:A4:DE:D7:DE:B9:B5:1C:19"
+      ]
+    }
+  }
+]
