@@ -9,6 +9,7 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
+// Cloud Database Connection
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
@@ -48,8 +49,6 @@ app.post('/api/login', async (req, res) => {
 });
 
 // --- KEEP ALL OTHER ROUTES EXACTLY THE SAME ---
-// (Paste the rest of your previous server.js code below: Admin, Setup, Reset, Dashboard, etc.)
-// For safety, I will include the critical Admin/Dashboard routes again to ensure nothing breaks.
 
 app.get('/api/admin/users', async (req, res) => {
     try { const result = await query("SELECT id, username, hostel_name, is_approved FROM users WHERE username != 'admin'"); res.json(result.rows); } 
